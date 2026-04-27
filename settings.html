@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Einstellungen – Stundenübersicht</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <a href="index.html" class="logo">Stunden<span>check</span></a>
+    <nav>
+      <a href="index.html"     class="nav-link">Übersicht</a>
+      <a href="clients.html"   class="nav-link">Kunden</a>
+      <a href="employees.html" class="nav-link">Mitarbeiter</a>
+      <a href="settings.html"  class="nav-link active">Einstellungen</a>
+    </nav>
+  </div>
+</header>
+
+<main class="main">
+
+  <div class="page-header">
+    <div>
+      <h1>Einstellungen</h1>
+      <div class="sub">Supabase-Verbindung konfigurieren</div>
+    </div>
+  </div>
+
+  <div class="settings-grid">
+
+    <!-- Step 1: Supabase connection -->
+    <div class="card">
+      <div class="card-header">
+        <h2>🔗 Supabase-Verbindung</h2>
+        <span id="connStatus"></span>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info" style="margin-bottom:20px">
+          Supabase ist eine kostenlose Datenbank-Plattform. Erstelle ein kostenloses Projekt auf
+          <strong>supabase.com</strong> und trage die Zugangsdaten hier ein.
+          Die Daten werden nur lokal in deinem Browser gespeichert.
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:14px;max-width:520px">
+          <div class="field">
+            <label for="supabaseUrl">Supabase Project URL</label>
+            <input type="text" id="supabaseUrl" placeholder="https://xxxxxxxxxxxx.supabase.co" autocomplete="off">
+            <span class="hint">Zu finden unter: Project Settings → API → Project URL</span>
+          </div>
+          <div class="field">
+            <label for="supabaseKey">Supabase Anon Key</label>
+            <input type="password" id="supabaseKey" placeholder="eyJhbGci…" autocomplete="off" style="font-family:monospace;font-size:12px">
+            <span class="hint">Zu finden unter: Project Settings → API → anon public</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <button id="saveBtn" class="btn btn-primary">Verbindung speichern & testen</button>
+            <span id="saveStatus" style="font-size:13px"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: DB Setup -->
+    <div class="card">
+      <div class="card-header">
+        <h2>🗄️ Datenbank einrichten <span style="font-size:12px;font-weight:400;color:var(--text-muted)">(einmalig, nur beim ersten Mal)</span></h2>
+      </div>
+      <div class="card-body">
+        <p style="font-size:13.5px;color:var(--text-secondary);margin-bottom:16px">
+          Öffne den <strong>SQL Editor</strong> in deinem Supabase-Projekt und führe dieses Script einmalig aus:
+        </p>
+        <div class="code-block-wrap">
+          <button class="copy-btn" id="copySQL">Kopieren</button>
+          <pre class="code-block" id="sqlBlock">-- Kundentabelle
+create table if not exists clients (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  am_budget  numeric,
+  adv_budget numeric,
+  created_at timestamptz default now()
+);
+
+-- Mitarbeitertabelle
+create table if not exists employees (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  role       text not null check (role in ('account_manager','advertising','freelancer','other')),
+  email      text,
+  active     boolean not null default true,
+  created_at timestamptz default now()
+);
+
+-- Stundeneinträge pro Mitarbeiter, Kunde und Monat
+create table if not exists entries (
+  id          uuid primary key default gen_random_uuid(),
+  client_id   uuid not null references clients(id)   on delete cascade,
+  employee_id uuid not null references employees(id) on delete cascade,
+  year        int  not null,
+  month       int  not null,
+  hours       numeric not null default 0,
+  updated_at  timestamptz default now(),
+  constraint entries_unique unique (client_id, employee_id, year, month)
+);
+
+-- Zugriff für alle (team-internes Tool ohne Login)
+alter table clients   disable row level security;
+alter table employees disable row level security;
+alter table entries   disable row level security;</pre>
+        </div>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:12px">
+          ℹ️ Row Level Security ist deaktiviert, da das Tool intern genutzt wird. Teile die Supabase-URL und den Key nur mit Teammitgliedern.
+        </p>
+      </div>
+    </div>
+
+    <!-- Step 3: GitHub Pages -->
+    <div class="card">
+      <div class="card-header">
+        <h2>🚀 GitHub Pages Hosting</h2>
+      </div>
+      <div class="card-body">
+        <p style="font-size:13.5px;color:var(--text-secondary);margin-bottom:16px">
+          So hostest du das Tool auf GitHub Pages, damit alle Mitarbeiter darauf zugreifen können:
+        </p>
+        <ol style="font-size:13.5px;line-height:2;color:var(--text-secondary);padding-left:20px">
+          <li>Repository auf <strong>github.com</strong> erstellen (öffentlich oder privat)</li>
+          <li>Alle Dateien aus dem <code style="background:var(--bg);padding:1px 5px;border-radius:3px">stundencheck/</code>-Ordner ins Repository pushen</li>
+          <li>Repository → <strong>Settings → Pages → Source: main Branch</strong> aktivieren</li>
+          <li>URL (<code style="background:var(--bg);padding:1px 5px;border-radius:3px">https://user.github.io/stundencheck/</code>) im Team teilen</li>
+          <li>Jeder Mitarbeiter gibt einmalig Supabase-URL und Key in den Einstellungen ein</li>
+        </ol>
+        <div class="code-block-wrap" style="margin-top:16px">
+          <pre class="code-block">cd stundencheck
+git init
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/DEIN-USER/stundencheck.git
+git push -u origin main</pre>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/db.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/settings.js"></script>
+</body>
+</html>
