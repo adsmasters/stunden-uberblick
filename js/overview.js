@@ -44,6 +44,9 @@
   function loadData() {
     showLoading();
     const year = parseInt(yearSel.value);
+    const ym   = window.currentYearMonth();
+    // For the current year only count months up to today
+    const maxMonth = (year === ym.year) ? ym.month : 12;
 
     Promise.all([
       window.db.clients.list(),
@@ -56,9 +59,12 @@
         return;
       }
 
+      // Filter entries to completed months only (for current year)
+      const visibleEntries = entries.filter(e => e.month <= maxMonth);
+
       // Group entries by client
       const entriesByClient = {};
-      entries.forEach(e => {
+      visibleEntries.forEach(e => {
         if (!entriesByClient[e.client_id]) entriesByClient[e.client_id] = [];
         entriesByClient[e.client_id].push(e);
       });
@@ -69,8 +75,8 @@
         agg:     window.aggregateEntries(entriesByClient[c.id] || []),
       }));
 
-      renderTable(rows, year);
-      renderSummary(rows, year);
+      renderTable(rows, year, maxMonth);
+      renderSummary(rows, year, maxMonth);
       hideLoading();
       tableWrap.classList.remove('hidden');
       summaryEl.classList.remove('hidden');
@@ -82,16 +88,16 @@
   }
 
   // ── Render table ──────────────────────────────────────────────────────
-  function renderTable(rows, year) {
+  function renderTable(rows, year, maxMonth) {
     tbody.innerHTML = '';
 
     rows.forEach((row, i) => {
       const { client: c, entries: clientEntries, agg } = row;
       const { amH, advH, flH, amTotal, breakdown } = agg;
 
-      // Annual budget = monthly budget × 12
-      const annualAmBdg  = c.am_budget  != null ? c.am_budget  * 12 : null;
-      const annualAdvBdg = c.adv_budget != null ? c.adv_budget * 12 : null;
+      // Budget = monthly budget × elapsed months
+      const annualAmBdg  = c.am_budget  != null ? c.am_budget  * maxMonth : null;
+      const annualAdvBdg = c.adv_budget != null ? c.adv_budget * maxMonth : null;
 
       const amDiff  = annualAmBdg  != null ? amTotal - annualAmBdg  : null;
       const advDiff = annualAdvBdg != null ? advH    - annualAdvBdg : null;
@@ -187,32 +193,37 @@
   }
 
   // ── Summary stats ─────────────────────────────────────────────────────
-  function renderSummary(rows, year) {
+  function renderSummary(rows, year, maxMonth) {
     let totAm = 0, totAdv = 0, totalBudget = 0, clientsOver = 0;
     let hasBudget = false;
     rows.forEach(({ client: c, agg }) => {
       totAm  += agg.amTotal;
       totAdv += agg.advH;
-      const annualAmBdg  = c.am_budget  != null ? c.am_budget  * 12 : null;
-      const annualAdvBdg = c.adv_budget != null ? c.adv_budget * 12 : null;
-      if (annualAmBdg != null || annualAdvBdg != null) {
+      const periodAmBdg  = c.am_budget  != null ? c.am_budget  * maxMonth : null;
+      const periodAdvBdg = c.adv_budget != null ? c.adv_budget * maxMonth : null;
+      if (periodAmBdg != null || periodAdvBdg != null) {
         hasBudget = true;
-        totalBudget += (annualAmBdg || 0) + (annualAdvBdg || 0);
-        if ((annualAmBdg  != null && agg.amTotal > annualAmBdg  + 0.05) ||
-            (annualAdvBdg != null && agg.advH    > annualAdvBdg + 0.05)) clientsOver++;
+        totalBudget += (periodAmBdg || 0) + (periodAdvBdg || 0);
+        if ((periodAmBdg  != null && agg.amTotal > periodAmBdg  + 0.05) ||
+            (periodAdvBdg != null && agg.advH    > periodAdvBdg + 0.05)) clientsOver++;
       }
     });
     const total = totAm + totAdv;
     const diff  = hasBudget ? total - totalBudget : null;
     const diffR = diff != null ? window.fmtDiff(diff) : { text: '—', cls: 'zero' };
 
+    // Period label e.g. "Jan – Apr 2026" or "2025"
+    const periodLabel = maxMonth < 12
+      ? `${window.MONTHS_DE[0].slice(0,3)} – ${window.MONTHS_DE[maxMonth - 1].slice(0,3)} ${year}`
+      : `${year}`;
+
     summaryEl.innerHTML = `
       <div class="stats-row">
-        <div class="stat-card"><div class="label">Account Mgmt ${year}</div><div class="value">${window.fmtHours(totAm)}</div></div>
-        <div class="stat-card"><div class="label">Advertising ${year}</div><div class="value">${window.fmtHours(totAdv)}</div></div>
-        <div class="stat-card"><div class="label">Gesamt ${year}</div><div class="value">${window.fmtHours(total)}</div></div>
+        <div class="stat-card"><div class="label">Account Mgmt (${periodLabel})</div><div class="value">${window.fmtHours(totAm)}</div></div>
+        <div class="stat-card"><div class="label">Advertising (${periodLabel})</div><div class="value">${window.fmtHours(totAdv)}</div></div>
+        <div class="stat-card"><div class="label">Gesamt (${periodLabel})</div><div class="value">${window.fmtHours(total)}</div></div>
         ${hasBudget ? `
-        <div class="stat-card"><div class="label">Differenz Jahresbudget</div>
+        <div class="stat-card"><div class="label">Differenz Budget (${periodLabel})</div>
           <div class="value ${diffR.cls === 'positive' ? 'over' : diffR.cls === 'negative' ? 'under' : ''}">${diffR.text}</div></div>
         <div class="stat-card"><div class="label">Kunden über Budget</div>
           <div class="value ${clientsOver > 0 ? 'over' : ''}">${clientsOver} / ${rows.length}</div></div>` : ''}
