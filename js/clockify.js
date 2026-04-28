@@ -87,6 +87,18 @@
       });
     },
 
+    // All projects in workspace
+    getProjects: function () {
+      var wId = getWorkspaceId();
+      return cfetch(BASE + '/workspaces/' + wId + '/projects?page-size=500&archived=false');
+    },
+
+    // All users in workspace
+    getUsers: function () {
+      var wId = getWorkspaceId();
+      return cfetch(BASE + '/workspaces/' + wId + '/users?page-size=500');
+    },
+
     // Returns { workspaceName, workspaces[] }
     getWorkspaces: function () {
       return cfetch(BASE + '/workspaces');

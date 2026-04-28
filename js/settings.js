@@ -108,6 +108,119 @@
       });
   });
 
+  // ── Clockify import ──────────────────────────────────────────────────
+  var importClientsBtn   = document.getElementById('importClientsBtn');
+  var importEmployeesBtn = document.getElementById('importEmployeesBtn');
+  var importStatus       = document.getElementById('importStatus');
+  var importResult       = document.getElementById('importResult');
+
+  function norm(s) { return (s || '').trim().toLowerCase(); }
+
+  function setImportStatus(msg, type) {
+    importStatus.textContent = msg;
+    importStatus.style.color =
+      type === 'success' ? 'var(--success)' :
+      type === 'error'   ? 'var(--danger)'  : 'var(--text-secondary)';
+  }
+
+  function showImportResult(html) {
+    importResult.innerHTML = html;
+  }
+
+  importClientsBtn.addEventListener('click', function () {
+    if (!window.clockify.isConfigured()) {
+      setImportStatus('Clockify nicht verbunden.', 'error'); return;
+    }
+    importClientsBtn.disabled    = true;
+    importClientsBtn.textContent = 'Importiere…';
+    setImportStatus('', '');
+    showImportResult('');
+
+    Promise.all([
+      window.clockify.getProjects(),
+      window.db.clients.list(),
+    ]).then(function (results) {
+      var projects  = results[0];
+      var existing  = results[1];
+      var existingNames = {};
+      existing.forEach(function (c) { existingNames[norm(c.name)] = true; });
+
+      var toCreate = projects.filter(function (p) { return !existingNames[norm(p.name)]; });
+      var skipped  = projects.length - toCreate.length;
+
+      if (!toCreate.length) {
+        setImportStatus('Alle ' + skipped + ' Projekte bereits vorhanden.', 'success');
+        return;
+      }
+
+      return Promise.all(toCreate.map(function (p) {
+        return window.db.clients.create(p.name, null, null, null, null);
+      })).then(function () {
+        setImportStatus('', '');
+        showImportResult(
+          '<div class="alert alert-success">✓ ' + toCreate.length + ' Kunden importiert' +
+          (skipped ? ' · ' + skipped + ' bereits vorhanden' : '') + ':<br>' +
+          '<strong>' + toCreate.map(function (p) { return p.name; }).join(', ') + '</strong></div>'
+        );
+      });
+    }).catch(function (e) {
+      setImportStatus('Fehler: ' + e.message, 'error');
+    }).finally(function () {
+      importClientsBtn.disabled    = false;
+      importClientsBtn.textContent = 'Kunden importieren';
+    });
+  });
+
+  importEmployeesBtn.addEventListener('click', function () {
+    if (!window.clockify.isConfigured()) {
+      setImportStatus('Clockify nicht verbunden.', 'error'); return;
+    }
+    importEmployeesBtn.disabled    = true;
+    importEmployeesBtn.textContent = 'Importiere…';
+    setImportStatus('', '');
+    showImportResult('');
+
+    Promise.all([
+      window.clockify.getUsers(),
+      window.db.employees.list(),
+    ]).then(function (results) {
+      var users    = results[0];
+      var existing = results[1];
+      var existingNames = {};
+      existing.forEach(function (e) { existingNames[norm(e.name)] = true; });
+
+      var toCreate = users.filter(function (u) {
+        var name = (u.name || u.email || '').trim();
+        return name && !existingNames[norm(name)];
+      });
+      var skipped = users.length - toCreate.length;
+
+      if (!toCreate.length) {
+        setImportStatus('Alle ' + skipped + ' Mitarbeiter bereits vorhanden.', 'success');
+        return;
+      }
+
+      return Promise.all(toCreate.map(function (u) {
+        var name  = (u.name || u.email || '').trim();
+        var email = u.email || null;
+        return window.db.employees.create(name, 'other', email);
+      })).then(function () {
+        setImportStatus('', '');
+        showImportResult(
+          '<div class="alert alert-success">✓ ' + toCreate.length + ' Mitarbeiter importiert' +
+          (skipped ? ' · ' + skipped + ' bereits vorhanden' : '') + ':<br>' +
+          '<strong>' + toCreate.map(function (u) { return u.name || u.email; }).join(', ') + '</strong>' +
+          '<br><span style="font-size:12px;color:var(--text-muted)">Bitte Rollen unter <a href="employees.html">Mitarbeiter</a> setzen.</span></div>'
+        );
+      });
+    }).catch(function (e) {
+      setImportStatus('Fehler: ' + e.message, 'error');
+    }).finally(function () {
+      importEmployeesBtn.disabled    = false;
+      importEmployeesBtn.textContent = 'Mitarbeiter importieren';
+    });
+  });
+
   copyBtn.addEventListener('click', function () {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(sqlBlock.textContent.trim())
