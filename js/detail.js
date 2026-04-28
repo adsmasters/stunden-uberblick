@@ -51,6 +51,18 @@
 
   var currentClient  = null;
   var allEmployees   = [];
+
+  // ── Contract start helpers ────────────────────────────────────────────
+  function contractStart(client) {
+    if (!client || !client.contract_start) return null;
+    var d = new Date(client.contract_start);
+    return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
+  }
+  function isBeforeContract(year, month, client) {
+    var cs = contractStart(client);
+    if (!cs) return false;
+    return year < cs.year || (year === cs.year && month < cs.month);
+  }
   var modalState     = null; // { year, month }
   var adjState       = null; // { year, month, existing: adj|null }
 
@@ -107,7 +119,9 @@
       var bdgParts = [];
       if (client.am_budget  != null) bdgParts.push('AM: '          + window.fmtHours(client.am_budget)  + '/Mo');
       if (client.adv_budget != null) bdgParts.push('Advertising: ' + window.fmtHours(client.adv_budget) + '/Mo');
-      budgetInfoEl.textContent = bdgParts.length ? 'Budget · ' + bdgParts.join(' · ') : 'Kein Budget hinterlegt';
+      var cs = contractStart(client);
+      if (cs) bdgParts.push('Vertragsstart: ' + window.MONTHS_DE[cs.month - 1] + ' ' + cs.year);
+      budgetInfoEl.textContent = bdgParts.length ? bdgParts.join(' · ') : 'Kein Budget hinterlegt';
 
       // Group entries by month
       var entriesByMonth = {};
@@ -156,14 +170,16 @@
       var advH    = syncAdvH    + adjAdv;
       var total   = amTotal + advH;
 
-      var amDiff  = client.am_budget  != null ? amTotal - client.am_budget  : null;
-      var advDiff = client.adv_budget != null ? advH    - client.adv_budget : null;
+      // No budget comparison for months before contract start
+      var beforeContract = isBeforeContract(year, month, client);
+      var amDiff  = (!beforeContract && client.am_budget  != null) ? amTotal - client.am_budget  : null;
+      var advDiff = (!beforeContract && client.adv_budget != null) ? advH    - client.adv_budget : null;
       var amOver  = amDiff  != null && amDiff  > 0.05;
       var advOver = advDiff != null && advDiff > 0.05;
       var amOk    = amDiff  != null && amDiff  <= 0.05;
       var advOk   = advDiff != null && advDiff <= 0.05;
 
-      var hasBudget = client.am_budget != null || client.adv_budget != null;
+      var hasBudget = !beforeContract && (client.am_budget != null || client.adv_budget != null);
       var totalBdg  = (client.am_budget || 0) + (client.adv_budget || 0);
       var totalDiff = hasBudget ? total - totalBdg : null;
 
@@ -172,11 +188,13 @@
       if (advOver) overBadges.push('<span class="badge badge-over">Advertising</span>');
       var overHtml = isFuture
         ? '<span class="text-muted">–</span>'
-        : overBadges.length
-          ? '<div class="over-badges">' + overBadges.join('') + '</div>'
-          : hasBudget
-            ? '<span class="badge badge-ok">✓</span>'
-            : '<span class="text-muted" style="font-size:12px">—</span>';
+        : beforeContract
+          ? '<span class="text-muted" style="font-size:11px">vor Vertragsstart</span>'
+          : overBadges.length
+            ? '<div class="over-badges">' + overBadges.join('') + '</div>'
+            : hasBudget
+              ? '<span class="badge badge-ok">✓</span>'
+              : '<span class="text-muted" style="font-size:12px">—</span>';
 
       var totalDiffStr = totalDiff != null
         ? '<div style="font-size:11.5px">' + window.fmtDiff(totalDiff).text + '</div>' : '';
@@ -324,6 +342,7 @@
     var totAm = 0, totAdv = 0, months = 0;
     for (var m = 1; m <= 12; m++) {
       if (year > ym.year || (year === ym.year && m > ym.month)) continue;
+      if (isBeforeContract(year, m, client)) continue;
       var agg    = window.aggregateEntries(entriesByMonth[m] || []);
       var adj    = adjByMonth[m] || null;
       totAm  += agg.amTotal + (adj ? adj.am_hours  || 0 : 0);

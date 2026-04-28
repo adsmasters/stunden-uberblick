@@ -12,6 +12,17 @@
   const summaryEl = document.getElementById('summary');
   const emptyEl   = document.getElementById('emptyClients');
 
+  // ── Contract start helpers ────────────────────────────────────────────
+  function effectiveMonths(client, year, maxMonth) {
+    if (!client.contract_start) return maxMonth;
+    const d  = new Date(client.contract_start);
+    const csY = d.getUTCFullYear();
+    const csM = d.getUTCMonth() + 1;
+    if (csY > year) return 0;               // contract hasn't started this year
+    const startM = csY === year ? csM : 1;  // if started in a previous year, full year counts
+    return Math.max(0, maxMonth - startM + 1);
+  }
+
   // ── Sort state ────────────────────────────────────────────────────────
   let sortCol = null; // 'name' | 'am' | 'adv' | 'total' | 'diff'
   let sortDir = 'desc';
@@ -179,9 +190,10 @@
       const { client: c, entries: clientEntries, agg } = row;
       const { amH, advH, flH, amTotal, breakdown } = agg;
 
-      // Budget = monthly budget × elapsed months
-      const annualAmBdg  = c.am_budget  != null ? c.am_budget  * maxMonth : null;
-      const annualAdvBdg = c.adv_budget != null ? c.adv_budget * maxMonth : null;
+      // Budget = monthly budget × effective months (respects contract start)
+      const effM = effectiveMonths(c, year, maxMonth);
+      const annualAmBdg  = c.am_budget  != null && effM > 0 ? c.am_budget  * effM : null;
+      const annualAdvBdg = c.adv_budget != null && effM > 0 ? c.adv_budget * effM : null;
 
       const amDiff  = annualAmBdg  != null ? amTotal - annualAmBdg  : null;
       const advDiff = annualAdvBdg != null ? advH    - annualAdvBdg : null;
@@ -283,8 +295,9 @@
     rows.forEach(({ client: c, agg }) => {
       totAm  += agg.amTotal;
       totAdv += agg.advH;
-      const periodAmBdg  = c.am_budget  != null ? c.am_budget  * maxMonth : null;
-      const periodAdvBdg = c.adv_budget != null ? c.adv_budget * maxMonth : null;
+      const effM2 = effectiveMonths(c, year, maxMonth);
+      const periodAmBdg  = c.am_budget  != null && effM2 > 0 ? c.am_budget  * effM2 : null;
+      const periodAdvBdg = c.adv_budget != null && effM2 > 0 ? c.adv_budget * effM2 : null;
       if (periodAmBdg != null || periodAdvBdg != null) {
         hasBudget = true;
         totalBudget += (periodAmBdg || 0) + (periodAdvBdg || 0);

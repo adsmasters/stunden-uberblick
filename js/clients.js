@@ -16,6 +16,7 @@
   var clientAdvInput     = document.getElementById('clientAdvInput');
   var clientAmEmpSelect  = document.getElementById('clientAmEmpSelect');
   var clientAdvEmpSelect = document.getElementById('clientAdvEmpSelect');
+  var clientStartInput   = document.getElementById('clientStartInput');
   var clientModalClose   = document.getElementById('clientModalClose');
   var clientModalCancel  = document.getElementById('clientModalCancel');
   var clientModalSave    = document.getElementById('clientModalSave');
@@ -103,6 +104,9 @@
     clientAdvInput.value  = client && client.adv_budget != null ? client.adv_budget : '';
     clientAmEmpSelect.value  = (client && client.am_employee_id)  || '';
     clientAdvEmpSelect.value = (client && client.adv_employee_id) || '';
+    // contract_start is stored as "YYYY-MM-DD", input[type=month] needs "YYYY-MM"
+    clientStartInput.value   = (client && client.contract_start)
+      ? client.contract_start.substring(0, 7) : '';
     clientModal.classList.remove('hidden');
     clientNameInput.focus();
   }
@@ -121,14 +125,18 @@
     var adv    = parseFloat(clientAdvInput.value) || null;
     var amEmp  = clientAmEmpSelect.value  || null;
     var advEmp = clientAdvEmpSelect.value || null;
+    // Store as "YYYY-MM-01" date string (Postgres date column)
+    var contractStart = clientStartInput.value ? clientStartInput.value + '-01' : null;
 
     clientModalSave.disabled    = true;
     clientModalSave.textContent = 'Speichern…';
 
-    var fields = { name: name, am_budget: am, adv_budget: adv, am_employee_id: amEmp, adv_employee_id: advEmp };
+    var fields = { name: name, am_budget: am, adv_budget: adv,
+                   am_employee_id: amEmp, adv_employee_id: advEmp,
+                   contract_start: contractStart };
     var promise = editingClientId
       ? window.db.clients.update(editingClientId, fields)
-      : window.db.clients.create(name, am, adv, amEmp, advEmp);
+      : window.db.clients.create(name, am, adv, amEmp, advEmp, contractStart);
 
     promise.then(function () {
       closeClientModal();
