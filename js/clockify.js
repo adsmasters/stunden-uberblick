@@ -70,17 +70,19 @@
         body: JSON.stringify({
           dateRangeStart: start,
           dateRangeEnd:   end,
-          summaryFilter:  { groups: ['PROJECT', 'USER'] },
+          summaryFilter:  { groups: ['CLIENT', 'USER'] },
         }),
       }).then(function (data) {
-        // Build map: { normProjectName → { normUserName → hours } }
+        // Build map: { normClientName → { normUserName → hours } }
+        // Clockify sums all projects under a client automatically
         var map = {};
-        (data.groupOne || []).forEach(function (proj) {
-          var pKey = norm(proj.name);
-          map[pKey] = {};
-          (proj.children || []).forEach(function (user) {
+        (data.groupOne || []).forEach(function (client) {
+          var cKey = norm(client.name);
+          if (!cKey || cKey === 'no client' || cKey === 'kein kunde') return; // skip unassigned
+          map[cKey] = {};
+          (client.children || []).forEach(function (user) {
             // duration is in seconds in summary report
-            map[pKey][norm(user.name)] = (user.duration || 0) / 3600;
+            map[cKey][norm(user.name)] = (user.duration || 0) / 3600;
           });
         });
         return map;

@@ -249,7 +249,7 @@
       employees.forEach(e => { employeeMap[norm(e.name)] = e; });
 
       const saves     = [];
-      const unmatched = { projects: new Set(), users: new Set() };
+      const unmatched = { clients: new Set(), users: new Set() };
       let   matched   = 0;
 
       // Fetch all months sequentially with progress
@@ -257,13 +257,13 @@
         syncBtn.textContent = `Synchronisiere ${window.MONTHS_DE[m - 1]}… (${m}/${maxMonth})`;
         const cfMap = await window.clockify.fetchMonth(year, m);
 
-        Object.keys(cfMap).forEach(projKey => {
-          const client = clientMap[projKey];
-          if (!client) { unmatched.projects.add(projKey); return; }
+        Object.keys(cfMap).forEach(clientKey => {
+          const client = clientMap[clientKey];
+          if (!client) { unmatched.clients.add(clientKey); return; }
 
-          Object.keys(cfMap[projKey]).forEach(userKey => {
+          Object.keys(cfMap[clientKey]).forEach(userKey => {
             const emp   = employeeMap[userKey];
-            const hours = cfMap[projKey][userKey];
+            const hours = cfMap[clientKey][userKey];
             if (!emp) { unmatched.users.add(userKey); return; }
             saves.push(window.db.entries.upsert(
               client.id, emp.id, year, m,
@@ -279,8 +279,8 @@
 
       // Warnings for unmatched
       const warns = [];
-      if (unmatched.projects.size) warns.push('Nicht zugeordnete Projekte: <strong>' + [...unmatched.projects].join(', ') + '</strong>');
-      if (unmatched.users.size)    warns.push('Nicht zugeordnete Nutzer: <strong>'   + [...unmatched.users].join(', ')    + '</strong>');
+      if (unmatched.clients.size) warns.push('Nicht zugeordnete Kunden: <strong>' + [...unmatched.clients].join(', ') + '</strong>');
+      if (unmatched.users.size)   warns.push('Nicht zugeordnete Nutzer: <strong>' + [...unmatched.users].join(', ')   + '</strong>');
       if (warns.length) showWarn(warns.join('<br>'));
 
       syncBtn.textContent = `✓ ${matched} Einträge synchronisiert`;
