@@ -19,6 +19,7 @@
   var summaryEl     = document.getElementById('summary');
   var editClientBtn = document.getElementById('editClientBtn');
 
+  // Budget modal
   var budgetModal       = document.getElementById('budgetModal');
   var budgetAmInput     = document.getElementById('budgetAmInput');
   var budgetAdvInput    = document.getElementById('budgetAdvInput');
@@ -26,6 +27,7 @@
   var budgetModalCancel = document.getElementById('budgetModalCancel');
   var budgetModalSave   = document.getElementById('budgetModalSave');
 
+  // Entry modal
   var modal       = document.getElementById('entryModal');
   var modalTitle  = document.getElementById('modalTitle');
   var modalInfo   = document.getElementById('modalClientInfo');
@@ -35,9 +37,22 @@
   var modalCancel = document.getElementById('modalCancel');
   var modalSave   = document.getElementById('modalSave');
 
-  var currentClient = null;
-  var allEmployees  = [];
-  var modalState    = null; // { year, month }
+  // Adjustment modal
+  var adjModal       = document.getElementById('adjModal');
+  var adjModalTitle  = document.getElementById('adjModalTitle');
+  var adjModalInfo   = document.getElementById('adjModalInfo');
+  var adjAmInput     = document.getElementById('adjAmInput');
+  var adjAdvInput    = document.getElementById('adjAdvInput');
+  var adjNoteInput   = document.getElementById('adjNoteInput');
+  var adjModalClose  = document.getElementById('adjModalClose');
+  var adjModalCancel = document.getElementById('adjModalCancel');
+  var adjModalSave   = document.getElementById('adjModalSave');
+  var adjModalDelete = document.getElementById('adjModalDelete');
+
+  var currentClient  = null;
+  var allEmployees   = [];
+  var modalState     = null; // { year, month }
+  var adjState       = null; // { year, month, existing: adj|null }
 
   titleEl.textContent = clientName;
   document.title = clientName + ' – Stundenübersicht';
@@ -76,10 +91,12 @@
       window.db.clients.get(clientId),
       window.db.entries.forClientYear(clientId, year),
       window.db.employees.listActive(),
+      window.db.adjustments.forClientYear(clientId, year),
     ]).then(function (results) {
       currentClient = results[0];
-      var entries   = results[1];
-      allEmployees  = results[2];
+      var entries      = results[1];
+      allEmployees     = results[2];
+      var adjustments  = results[3];
 
       var client = currentClient;
       titleEl.textContent = client.name;
@@ -99,8 +116,12 @@
         entriesByMonth[e.month].push(e);
       });
 
-      renderTable(entriesByMonth, year, client);
-      renderSummary(entriesByMonth, year, client);
+      // Index adjustments by month
+      var adjByMonth = {};
+      (adjustments || []).forEach(function (a) { adjByMonth[a.month] = a; });
+
+      renderTable(entriesByMonth, adjByMonth, year, client);
+      renderSummary(entriesByMonth, adjByMonth, year, client);
       hideLoading();
       tableWrap.classList.remove('hidden');
       summaryEl.classList.remove('hidden');
@@ -110,7 +131,7 @@
   }
 
   // ── Render table ──────────────────────────────────────────────────────
-  function renderTable(entriesByMonth, year, client) {
+  function renderTable(entriesByMonth, adjByMonth, year, client) {
     tbody.innerHTML = '';
     var ym = window.currentYearMonth();
 
@@ -120,10 +141,19 @@
       var isCurrent= year === ym.year && month === ym.month;
       var monthEntries = entriesByMonth[month] || [];
       var agg = window.aggregateEntries(monthEntries);
+      var adj = adjByMonth[month] || null;
 
-      var amTotal = agg.amTotal;
-      var advH    = agg.advH;
-      var flH     = agg.flH;
+      // Synced hours
+      var syncAmTotal = agg.amTotal;
+      var syncAdvH    = agg.advH;
+
+      // Correction amounts
+      var adjAm  = adj ? (adj.am_hours  || 0) : 0;
+      var adjAdv = adj ? (adj.adv_hours || 0) : 0;
+
+      // Combined totals (what to display and compare vs budget)
+      var amTotal = syncAmTotal + adjAm;
+      var advH    = syncAdvH    + adjAdv;
       var total   = amTotal + advH;
 
       var amDiff  = client.am_budget  != null ? amTotal - client.am_budget  : null;
@@ -154,19 +184,26 @@
       var expandId  = 'am-expand-' + month;
       var btnId     = 'am-btn-' + month;
       var editBtnId = 'edit-btn-' + month;
+      var adjBtnId  = 'adj-btn-' + month;
 
       var hasAMData = agg.breakdown.some(function (b) {
         return b.role === 'account_manager' || b.role === 'freelancer';
       });
 
+      // AM cell – show combined total, annotation if correction exists
+      var adjAmBadge = (!isFuture && adjAm !== 0)
+        ? ' <span class="adj-badge" title="' + (adj && adj.note ? adj.note : 'Manuelle Korrektur') + '">'
+          + (adjAm > 0 ? '+' : '') + window.fmtHours(adjAm) + ' Korr.</span>'
+        : '';
+
       var amCellContent;
       if (isFuture) {
         amCellContent = '<span class="text-muted">–</span>';
-      } else if (hasAMData) {
+      } else if (hasAMData || adjAm !== 0) {
         amCellContent =
           '<button class="expand-btn" id="' + btnId + '" data-target="' + expandId + '">' +
             window.svgChevron() + ' ' + window.fmtHours(amTotal) +
-          '</button>' +
+          '</button>' + adjAmBadge +
           (amDiff != null ? '<div style="font-size:11.5px">' + window.fmtDiff(amDiff).text + '</div>' : '');
       } else {
         amCellContent =
@@ -174,10 +211,20 @@
           (amDiff != null ? '<span class="h-diff">' + window.fmtDiff(amDiff).text + '</span>' : '') + '</div>';
       }
 
+      // ADV cell
+      var adjAdvBadge = (!isFuture && adjAdv !== 0)
+        ? ' <span class="adj-badge" title="' + (adj && adj.note ? adj.note : 'Manuelle Korrektur') + '">'
+          + (adjAdv > 0 ? '+' : '') + window.fmtHours(adjAdv) + ' Korr.</span>'
+        : '';
+
       var advCellContent = isFuture
         ? '<span class="text-muted">–</span>'
-        : '<div class="cell-hours"><span class="h-main">' + window.fmtHours(advH) + '</span>' +
+        : '<div class="cell-hours"><span class="h-main">' + window.fmtHours(advH) + '</span>' + adjAdvBadge +
           (advDiff != null ? '<span class="h-diff">' + window.fmtDiff(advDiff).text + '</span>' : '') + '</div>';
+
+      // Adjustment button – highlighted if correction exists
+      var adjBtnStyle = adj ? 'color:var(--primary);font-weight:600' : '';
+      var adjBtnTitle = adj ? 'Korrektur bearbeiten' : 'Korrektur hinzufügen';
 
       var tr = document.createElement('tr');
       tr.className = isFuture ? 'month-future' : isCurrent ? 'month-current' : '';
@@ -193,15 +240,26 @@
         '</td>' +
         '<td class="center">' + overHtml + '</td>' +
         '<td class="center">' +
-          '<button class="btn btn-ghost btn-sm btn-icon" id="' + editBtnId + '" title="Stunden bearbeiten">' +
-            window.svgPencil() +
-          '</button>' +
+          '<div style="display:flex;gap:4px;justify-content:center">' +
+            '<button class="btn btn-ghost btn-sm btn-icon" id="' + editBtnId + '" title="Stunden bearbeiten">' +
+              window.svgPencil() +
+            '</button>' +
+            '<button class="btn btn-ghost btn-sm" id="' + adjBtnId + '" title="' + adjBtnTitle + '" style="' + adjBtnStyle + '">' +
+              '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
+                (adj
+                  ? '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>'
+                  : '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>') +
+              '</svg>' +
+              (adj ? ' Korr.' : ' Korr.') +
+            '</button>' +
+          '</div>' +
         '</td>';
 
       tbody.appendChild(tr);
 
-      // AM breakdown sub-row
-      if (hasAMData && !isFuture) {
+      // AM breakdown sub-row (shows synced hours only, correction shown as extra line)
+      var showExpand = (hasAMData || adjAm !== 0) && !isFuture;
+      if (showExpand) {
         var amItems = agg.breakdown.filter(function (b) {
           return b.role === 'account_manager' || b.role === 'freelancer';
         });
@@ -215,6 +273,15 @@
             (isFL ? '<span class="fl-divider">÷3 = ' + window.fmtHours(counted) + '</span>' : '') +
           '</span>';
         }).join('');
+
+        if (adjAm !== 0) {
+          amBreakdownHtml +=
+            '<span class="am-breakdown-item" style="color:var(--primary)">' +
+              '<span class="am-tag role-am">Korr.</span>' +
+              '<span class="emp-hours">' + (adjAm > 0 ? '+' : '') + window.fmtHours(adjAm) + '</span>' +
+              (adj && adj.note ? '<span>' + adj.note + '</span>' : '') +
+            '</span>';
+        }
 
         var detailTr = document.createElement('tr');
         detailTr.id        = expandId;
@@ -233,25 +300,34 @@
         })(btnId, expandId);
       }
 
-      // Edit button
+      // Edit button (employee hours)
       (function (m, mEntries) {
         var editBtn = tr.querySelector('#' + editBtnId);
         if (editBtn) editBtn.addEventListener('click', function () {
           openModal(parseInt(yearSel.value), m, mEntries);
         });
       })(month, monthEntries);
+
+      // Adjustment button
+      (function (m, existing) {
+        var adjBtn = tr.querySelector('#' + adjBtnId);
+        if (adjBtn) adjBtn.addEventListener('click', function () {
+          openAdjModal(parseInt(yearSel.value), m, existing);
+        });
+      })(month, adj);
     });
   }
 
   // ── Summary ───────────────────────────────────────────────────────────
-  function renderSummary(entriesByMonth, year, client) {
+  function renderSummary(entriesByMonth, adjByMonth, year, client) {
     var ym = window.currentYearMonth();
     var totAm = 0, totAdv = 0, months = 0;
     for (var m = 1; m <= 12; m++) {
       if (year > ym.year || (year === ym.year && m > ym.month)) continue;
-      var agg = window.aggregateEntries(entriesByMonth[m] || []);
-      totAm  += agg.amTotal;
-      totAdv += agg.advH;
+      var agg    = window.aggregateEntries(entriesByMonth[m] || []);
+      var adj    = adjByMonth[m] || null;
+      totAm  += agg.amTotal + (adj ? adj.am_hours  || 0 : 0);
+      totAdv += agg.advH    + (adj ? adj.adv_hours || 0 : 0);
       months++;
     }
     var total    = totAm + totAdv;
@@ -272,7 +348,7 @@
       '</div>';
   }
 
-  // ── Entry modal ───────────────────────────────────────────────────────
+  // ── Entry modal (employee hours) ──────────────────────────────────────
   function openModal(year, month, existingEntries) {
     modalState = { year: year, month: month };
     modalTitle.textContent = 'Stunden erfassen';
@@ -408,6 +484,50 @@
       .finally(function () { modalSave.disabled = false; modalSave.textContent = 'Speichern'; });
   });
 
+  // ── Adjustment modal ──────────────────────────────────────────────────
+  function openAdjModal(year, month, existing) {
+    adjState = { year: year, month: month, existing: existing || null };
+    adjModalTitle.textContent = existing ? 'Korrektur bearbeiten' : 'Korrektur hinzufügen';
+    adjModalInfo.textContent  = (currentClient ? currentClient.name + ' · ' : '') + window.MONTHS_DE[month - 1] + ' ' + year;
+    adjAmInput.value   = existing && existing.am_hours  ? existing.am_hours  : '';
+    adjAdvInput.value  = existing && existing.adv_hours ? existing.adv_hours : '';
+    adjNoteInput.value = existing && existing.note      ? existing.note      : '';
+    adjModalDelete.style.display = existing ? '' : 'none';
+    adjModal.classList.remove('hidden');
+    adjAmInput.focus();
+  }
+
+  function closeAdjModal() { adjModal.classList.add('hidden'); adjState = null; }
+  adjModalClose.addEventListener('click',  closeAdjModal);
+  adjModalCancel.addEventListener('click', closeAdjModal);
+  adjModal.addEventListener('click', function (e) { if (e.target === adjModal) closeAdjModal(); });
+
+  adjModalSave.addEventListener('click', function () {
+    if (!adjState) return;
+    var amH  = parseFloat(adjAmInput.value)  || 0;
+    var advH = parseFloat(adjAdvInput.value) || 0;
+    var note = adjNoteInput.value.trim() || null;
+
+    adjModalSave.disabled    = true;
+    adjModalSave.textContent = 'Speichern…';
+
+    window.db.adjustments.upsert(clientId, adjState.year, adjState.month, amH, advH, note)
+      .then(function () { closeAdjModal(); loadData(); })
+      .catch(function (e) { alert('Fehler: ' + e.message); })
+      .finally(function () { adjModalSave.disabled = false; adjModalSave.textContent = 'Speichern'; });
+  });
+
+  adjModalDelete.addEventListener('click', function () {
+    if (!adjState || !adjState.existing) return;
+    adjModalDelete.disabled    = true;
+    adjModalDelete.textContent = 'Löschen…';
+
+    window.db.adjustments.delete(clientId, adjState.year, adjState.month)
+      .then(function () { closeAdjModal(); loadData(); })
+      .catch(function (e) { alert('Fehler: ' + e.message); })
+      .finally(function () { adjModalDelete.disabled = false; adjModalDelete.textContent = 'Korrektur löschen'; });
+  });
+
   // ── Budget modal ──────────────────────────────────────────────────────
   editClientBtn.addEventListener('click', function (e) {
     e.preventDefault();
@@ -436,7 +556,8 @@
 
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
-      if (modalState) { closeModal(); return; }
+      if (adjState)   { closeAdjModal();    return; }
+      if (modalState) { closeModal();       return; }
       closeBudgetModal();
     }
   });

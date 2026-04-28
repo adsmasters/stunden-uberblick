@@ -67,6 +67,24 @@
         q(s => s.from('clients').delete().eq('id', id)),
     },
 
+    adjustments: {
+      forClientYear: (clientId, year) =>
+        q(s => s.from('adjustments').select('*')
+          .eq('client_id', clientId).eq('year', year)),
+      upsert: (clientId, year, month, amHours, advHours, note) =>
+        q(s => s.from('adjustments').upsert(
+          { client_id: clientId, year, month,
+            am_hours:  amHours  || 0,
+            adv_hours: advHours || 0,
+            note:      note     || null,
+            updated_at: new Date().toISOString() },
+          { onConflict: 'client_id,year,month' }
+        ).select().single()),
+      delete: (clientId, year, month) =>
+        q(s => s.from('adjustments').delete()
+          .eq('client_id', clientId).eq('year', year).eq('month', month)),
+    },
+
     entries: {
       // All entries for a month across all clients (includes employee data)
       forMonth: (year, month) =>

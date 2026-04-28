@@ -12,6 +12,74 @@
   const summaryEl = document.getElementById('summary');
   const emptyEl   = document.getElementById('emptyClients');
 
+  // ── Sort state ────────────────────────────────────────────────────────
+  let sortCol = null; // 'name' | 'am' | 'adv' | 'total' | 'diff'
+  let sortDir = 'desc';
+  let lastRows     = [];
+  let lastMaxMonth = 12;
+
+  function sortRows(rows, maxMonth) {
+    if (!sortCol) return rows;
+    return rows.slice().sort(function (a, b) {
+      let va, vb;
+      const ac = a.client, bc = b.client;
+      const aa = a.agg,    ba = b.agg;
+      if (sortCol === 'name') {
+        va = ac.name.toLowerCase();
+        vb = bc.name.toLowerCase();
+      } else if (sortCol === 'am') {
+        va = aa.amTotal; vb = ba.amTotal;
+      } else if (sortCol === 'adv') {
+        va = aa.advH; vb = ba.advH;
+      } else if (sortCol === 'total') {
+        va = aa.amTotal + aa.advH;
+        vb = ba.amTotal + ba.advH;
+      } else if (sortCol === 'diff') {
+        const aBdg = (ac.am_budget  != null ? ac.am_budget  * maxMonth : 0)
+                   + (ac.adv_budget != null ? ac.adv_budget * maxMonth : 0);
+        const bBdg = (bc.am_budget  != null ? bc.am_budget  * maxMonth : 0)
+                   + (bc.adv_budget != null ? bc.adv_budget * maxMonth : 0);
+        va = (aa.amTotal + aa.advH) - aBdg;
+        vb = (ba.amTotal + ba.advH) - bBdg;
+      }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ?  1 : -1;
+      return 0;
+    });
+  }
+
+  function updateSortHeaders() {
+    document.querySelectorAll('thead th[data-sort]').forEach(function (th) {
+      const ind = th.querySelector('.sort-ind');
+      if (!ind) return;
+      if (th.dataset.sort === sortCol) {
+        ind.textContent = sortDir === 'asc' ? ' ↑' : ' ↓';
+        th.style.color = 'var(--primary)';
+      } else {
+        ind.textContent = ' ↕';
+        th.style.color = '';
+      }
+    });
+  }
+
+  // Wire up header clicks (after DOM ready)
+  document.querySelectorAll('thead th[data-sort]').forEach(function (th) {
+    th.addEventListener('click', function () {
+      const col = th.dataset.sort;
+      if (sortCol === col) {
+        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortCol = col;
+        sortDir = col === 'name' ? 'asc' : 'desc';
+      }
+      renderTable(lastRows, parseInt(yearSel.value), lastMaxMonth);
+      updateSortHeaders();
+    });
+    // Show idle indicator
+    const ind = th.querySelector('.sort-ind');
+    if (ind) ind.textContent = ' ↕';
+  });
+
   // ── Init year select ──────────────────────────────────────────────────
   (function initSelects() {
     const ym = window.currentYearMonth();
@@ -75,8 +143,23 @@
         agg:     window.aggregateEntries(entriesByClient[c.id] || []),
       }));
 
+      // Cache for re-sorting without reload
+      lastRows     = rows;
+      lastMaxMonth = maxMonth;
+
+      // Update table header with period
+      const ym2 = window.currentYearMonth();
+      const periodLabel2 = (year === ym2.year && maxMonth < 12)
+        ? `Jan – ${window.MONTHS_DE[maxMonth - 1].slice(0,3)} ${year}`
+        : `${year}`;
+      const thAmSub  = document.getElementById('thAmSub');
+      const thAdvSub = document.getElementById('thAdvSub');
+      if (thAmSub)  thAmSub.textContent  = periodLabel2 + ' · inkl. FL÷3';
+      if (thAdvSub) thAdvSub.textContent = periodLabel2;
+
       renderTable(rows, year, maxMonth);
       renderSummary(rows, year, maxMonth);
+      updateSortHeaders();
       hideLoading();
       tableWrap.classList.remove('hidden');
       summaryEl.classList.remove('hidden');
@@ -90,8 +173,9 @@
   // ── Render table ──────────────────────────────────────────────────────
   function renderTable(rows, year, maxMonth) {
     tbody.innerHTML = '';
+    const sorted = sortRows(rows, maxMonth);
 
-    rows.forEach((row, i) => {
+    sorted.forEach((row, i) => {
       const { client: c, entries: clientEntries, agg } = row;
       const { amH, advH, flH, amTotal, breakdown } = agg;
 
