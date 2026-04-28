@@ -111,6 +111,41 @@
   </div>
 </div>
 
+<!-- Correction Modal -->
+<div id="adjModal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h3 id="adjModalTitle">Monatskorrektur</h3>
+      <button class="modal-close" id="adjModalClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="adjModalInfo" style="font-size:13px;color:var(--text-secondary);margin-bottom:4px;font-weight:500"></div>
+      <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:16px">
+        Zusätzliche Stunden, die zum Clockify-Sync dazukommen.<br>Negative Werte möglich (z.B. bei Gutschriften).
+      </p>
+      <div class="field-row">
+        <div class="field">
+          <label for="adjAmInput">AM Korrektur (h)</label>
+          <input type="number" id="adjAmInput" step="0.25" placeholder="z.B. 5 oder -2">
+        </div>
+        <div class="field">
+          <label for="adjAdvInput">ADV Korrektur (h)</label>
+          <input type="number" id="adjAdvInput" step="0.25" placeholder="z.B. 3">
+        </div>
+      </div>
+      <div class="field">
+        <label for="adjNoteInput">Notiz <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
+        <input type="text" id="adjNoteInput" placeholder="z.B. Zusatzauftrag Q2, Sommerrabatt …">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" id="adjModalDelete" style="margin-right:auto;color:var(--danger)">Korrektur löschen</button>
+      <button class="btn btn-secondary" id="adjModalCancel">Abbrechen</button>
+      <button class="btn btn-primary"   id="adjModalSave">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <!-- Edit client budget modal -->
 <div id="budgetModal" class="modal-overlay hidden">
   <div class="modal">

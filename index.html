@@ -63,17 +63,17 @@
       <table>
         <thead>
           <tr>
-            <th style="min-width:180px">Kunde</th>
-            <th class="right" style="min-width:145px">
-              Account Mgmt
-              <div style="font-weight:400;font-size:10px;text-transform:none;letter-spacing:0;color:var(--text-muted);margin-top:1px">Jahresgesamt · inkl. FL÷3</div>
+            <th data-sort="name" class="sortable" style="min-width:180px">Kunde <span class="sort-ind"></span></th>
+            <th data-sort="am" class="sortable right" style="min-width:145px">
+              Account Mgmt <span class="sort-ind"></span>
+              <div id="thAmSub" style="font-weight:400;font-size:10px;text-transform:none;letter-spacing:0;color:var(--text-muted);margin-top:1px">inkl. FL÷3</div>
             </th>
-            <th class="right" style="min-width:120px">
-              Advertising
-              <div style="font-weight:400;font-size:10px;text-transform:none;letter-spacing:0;color:var(--text-muted);margin-top:1px">Jahresgesamt</div>
+            <th data-sort="adv" class="sortable right" style="min-width:120px">
+              Advertising <span class="sort-ind"></span>
+              <div id="thAdvSub" style="font-weight:400;font-size:10px;text-transform:none;letter-spacing:0;color:var(--text-muted);margin-top:1px"></div>
             </th>
-            <th class="right" style="min-width:105px">Gesamt</th>
-            <th class="center" style="min-width:160px">Über Budget</th>
+            <th data-sort="total" class="sortable right" style="min-width:105px">Gesamt <span class="sort-ind"></span></th>
+            <th data-sort="diff" class="sortable center" style="min-width:160px">Über Budget <span class="sort-ind"></span></th>
             <th class="center" style="min-width:90px">Details</th>
           </tr>
         </thead>
