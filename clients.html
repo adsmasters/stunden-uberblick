@@ -54,6 +54,7 @@
           <tr>
             <th style="width:40px;padding-right:4px"><input type="checkbox" id="selectAll" style="accent-color:var(--primary);width:15px;height:15px;cursor:pointer"></th>
             <th style="min-width:200px">Kundenname</th>
+            <th style="min-width:100px">Typ</th>
             <th class="right" style="min-width:160px">Budget AM</th>
             <th class="right" style="min-width:160px">Budget Advertising</th>
             <th style="min-width:160px">Account Manager</th>
@@ -114,10 +115,23 @@
           </select>
         </div>
       </div>
-      <div class="field">
-        <label for="clientStartInput">Vertragsstart <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
-        <input type="month" id="clientStartInput">
-        <span class="hint">Budget-Vergleich wird erst ab diesem Monat gerechnet</span>
+      <div class="field-row">
+        <div class="field">
+          <label for="clientStartInput">Vertragsstart <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
+          <input type="month" id="clientStartInput">
+          <span class="hint">Budget ab diesem Monat</span>
+        </div>
+        <div class="field" id="projectEndField" style="display:none">
+          <label for="clientEndInput">Projektende</label>
+          <input type="month" id="clientEndInput">
+          <span class="hint">Budget bis diesem Monat</span>
+        </div>
+      </div>
+      <div class="field" style="flex-direction:row;align-items:center;gap:10px">
+        <input type="checkbox" id="clientIsProject" style="width:auto;padding:0;accent-color:var(--primary)">
+        <label for="clientIsProject" style="margin:0;cursor:pointer;font-size:13.5px">
+          Projektkunde <span style="color:var(--text-muted);font-weight:400;font-size:12px">(einmaliges Projekt mit fixer Laufzeit)</span>
+        </label>
       </div>
     </div>
     <div class="modal-footer">
