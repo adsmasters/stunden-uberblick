@@ -189,9 +189,11 @@
       var existingNames = {};
       existing.forEach(function (e) { existingNames[norm(e.name)] = true; });
 
+      var allowList = ['anh','karoline','angeles','rabea','christian','thomas','philipp','fabian'];
       var toCreate = users.filter(function (u) {
-        var name = (u.name || u.email || '').trim();
-        return name && !existingNames[norm(name)];
+        var name = (u.name || '').trim();
+        var firstName = norm(name.split(' ')[0]);
+        return name && allowList.includes(firstName) && !existingNames[norm(name)];
       });
       var skipped = users.length - toCreate.length;
 
