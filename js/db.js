@@ -3,11 +3,17 @@
 
   let _sb = null;
 
+  // ── Supabase-Zugangsdaten ─────────────────────────────────────────────
+  // Fest hinterlegt – kein Setup durch den Nutzer erforderlich.
+  // localStorage-Werte überschreiben (für lokale Entwicklung / Umzug).
+  var DEFAULT_URL = 'https://lgrnmiszhhahfcmctmwo.supabase.co';   // ← hier deine URL eintragen
+  var DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxncm5taXN6aGhhaGZjbWN0bXdvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NjE2NDksImV4cCI6MjA4OTIzNzY0OX0.FDZRGMESves7XbAMs_oMLWmvnywMlVqe8p7f1kt06qk';                               // ← hier deinen Anon-Key eintragen
+
   function sb() {
     if (_sb) return _sb;
-    const url = localStorage.getItem('supabaseUrl');
-    const key = localStorage.getItem('supabaseKey');
-    if (!url || !key) throw new Error('NOT_CONFIGURED');
+    const url = localStorage.getItem('supabaseUrl') || DEFAULT_URL;
+    const key = localStorage.getItem('supabaseKey') || DEFAULT_KEY;
+    if (!url || !key || url === 'SUPABASE_URL_HERE') throw new Error('NOT_CONFIGURED');
     if (!window.supabase) throw new Error('Supabase-Bibliothek nicht geladen.');
     _sb = window.supabase.createClient(url, key, {
       auth: { persistSession: true, autoRefreshToken: true },
