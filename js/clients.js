@@ -29,6 +29,50 @@
   var editingClientId  = null;
   var deletingClientId = null;
   var allEmployees     = [];
+  var selectedIds      = new Set();
+
+  // ── Bulk action bar ───────────────────────────────────────────────────
+  var bulkBar = document.createElement('div');
+  bulkBar.id        = 'bulkBar';
+  bulkBar.className = 'bulk-bar hidden';
+  bulkBar.innerHTML =
+    '<span id="bulkCount"></span>' +
+    '<button id="bulkDeleteBtn" class="btn btn-danger btn-sm">' +
+      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>' +
+      ' Ausgewählte löschen' +
+    '</button>' +
+    '<button id="bulkCancelBtn" class="btn btn-ghost btn-sm">Abbrechen</button>';
+  document.querySelector('.page-header').after(bulkBar);
+
+  var bulkCount     = document.getElementById('bulkCount');
+  var bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+  var bulkCancelBtn = document.getElementById('bulkCancelBtn');
+
+  function updateBulkBar() {
+    if (selectedIds.size > 0) {
+      bulkCount.textContent = selectedIds.size + ' ausgewählt';
+      bulkBar.classList.remove('hidden');
+    } else {
+      bulkBar.classList.add('hidden');
+    }
+  }
+
+  function clearSelection() {
+    selectedIds.clear();
+    tbody.querySelectorAll('.row-check').forEach(function (cb) { cb.checked = false; });
+    var selectAll = document.getElementById('selectAll');
+    if (selectAll) selectAll.checked = false;
+    updateBulkBar();
+  }
+
+  bulkCancelBtn.addEventListener('click', clearSelection);
+
+  bulkDeleteBtn.addEventListener('click', function () {
+    if (!selectedIds.size) return;
+    deleteClientName.textContent = selectedIds.size + ' Kunden';
+    deletingClientId = null; // signals bulk mode
+    deleteModal.classList.remove('hidden');
+  });
 
   // ── Load employees for dropdowns ──────────────────────────────────────
   function loadEmployees() {
@@ -40,7 +84,6 @@
 
   function populateEmpDropdowns() {
     [clientAmEmpSelect, clientAdvEmpSelect].forEach(function (sel) {
-      // Keep "— kein —" option, replace the rest
       while (sel.options.length > 1) sel.remove(1);
       allEmployees.forEach(function (e) {
         var o = document.createElement('option');
@@ -111,11 +154,13 @@
   deleteModal.addEventListener('click', function (e) { if (e.target === deleteModal) closeDeleteModal(); });
 
   deleteModalConfirm.addEventListener('click', function () {
-    if (!deletingClientId) return;
     deleteModalConfirm.disabled    = true;
     deleteModalConfirm.textContent = 'Löschen…';
-    window.db.clients.delete(deletingClientId)
-      .then(function () { closeDeleteModal(); loadClients(); })
+
+    // Bulk or single
+    var ids = deletingClientId ? [deletingClientId] : Array.from(selectedIds);
+    Promise.all(ids.map(function (id) { return window.db.clients.delete(id); }))
+      .then(function () { closeDeleteModal(); clearSelection(); loadClients(); })
       .catch(function (e) {
         errorEl.innerHTML = '<div class="alert alert-danger">⚠️ Fehler: ' + e.message + '</div>';
         closeDeleteModal();
@@ -136,6 +181,7 @@
     loadingEl.classList.remove('hidden');
     tableWrap.classList.add('hidden');
     emptyState.classList.add('hidden');
+    clearSelection();
 
     window.db.clients.list()
       .then(function (clients) {
@@ -160,9 +206,28 @@
 
   function renderTable(clients) {
     tbody.innerHTML = '';
+
+    // Select-all checkbox
+    var selectAll = document.getElementById('selectAll');
+    if (selectAll) {
+      selectAll.checked = false;
+      selectAll.onchange = function () {
+        tbody.querySelectorAll('.row-check').forEach(function (cb) {
+          cb.checked = selectAll.checked;
+          if (selectAll.checked) selectedIds.add(cb.dataset.id);
+          else selectedIds.delete(cb.dataset.id);
+        });
+        updateBulkBar();
+      };
+    }
+
     clients.forEach(function (c) {
       var tr = document.createElement('tr');
       tr.innerHTML =
+        '<td style="padding-right:4px">' +
+          '<input type="checkbox" class="row-check" data-id="' + c.id + '"' +
+            ' style="accent-color:var(--primary);width:15px;height:15px;cursor:pointer">' +
+        '</td>' +
         '<td><a class="client-link" href="detail.html?id=' + encodeURIComponent(c.id) + '&name=' + encodeURIComponent(c.name) + '" style="font-weight:500">' + c.name + '</a></td>' +
         '<td class="right" style="font-variant-numeric:tabular-nums">' +
           (c.am_budget  != null ? '<strong>' + window.fmtHours(c.am_budget)  + '</strong> <span style="font-size:12px;color:var(--text-muted)">/ Monat</span>' : '<span class="text-muted">—</span>') +
@@ -181,6 +246,12 @@
             ' Löschen</button>' +
         '</div></td>';
 
+      tr.querySelector('.row-check').addEventListener('change', function () {
+        if (this.checked) selectedIds.add(this.dataset.id);
+        else              selectedIds.delete(this.dataset.id);
+        if (selectAll) selectAll.checked = selectedIds.size === clients.length;
+        updateBulkBar();
+      });
       tr.querySelector('.edit-btn').addEventListener('click',   function () { openClientModal(c); });
       tr.querySelector('.delete-btn').addEventListener('click', function () { openDeleteModal(c); });
       tbody.appendChild(tr);
