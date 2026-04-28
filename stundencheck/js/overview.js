@@ -1,0 +1,306 @@
+(function () {
+  'use strict';
+
+  const yearSel   = document.getElementById('yearSelect');
+  const loadBtn   = document.getElementById('loadBtn');
+  const syncBtn   = document.getElementById('syncBtn');
+  const tableWrap = document.getElementById('tableWrap');
+  const tbody     = document.getElementById('clientsBody');
+  const loadingEl = document.getElementById('loading');
+  const errorEl   = document.getElementById('error');
+  const setupHint = document.getElementById('setupHint');
+  const summaryEl = document.getElementById('summary');
+  const emptyEl   = document.getElementById('emptyClients');
+
+  // ── Init year select ──────────────────────────────────────────────────
+  (function initSelects() {
+    const ym = window.currentYearMonth();
+    for (let y = ym.year; y >= ym.year - 4; y--) {
+      const o = document.createElement('option');
+      o.value = y; o.textContent = y;
+      yearSel.appendChild(o);
+    }
+  })();
+
+  // ── State helpers ─────────────────────────────────────────────────────
+  function showLoading(msg) {
+    loadingEl.innerHTML = `<div class="loading-bar"><div class="spinner"></div>${msg || 'Lade Daten…'}</div>`;
+    loadingEl.classList.remove('hidden');
+    tableWrap.classList.add('hidden');
+    summaryEl.classList.add('hidden');
+    emptyEl.classList.add('hidden');
+    errorEl.innerHTML = '';
+  }
+  function hideLoading() { loadingEl.classList.add('hidden'); }
+  function showError(msg) {
+    errorEl.innerHTML = `<div class="alert alert-danger">⚠️ ${msg}</div>`;
+    loadingEl.classList.add('hidden');
+  }
+  function showWarn(msg) {
+    errorEl.innerHTML = `<div class="alert alert-warn">⚠️ ${msg}</div>`;
+  }
+
+  // ── Load data ─────────────────────────────────────────────────────────
+  function loadData() {
+    showLoading();
+    const year = parseInt(yearSel.value);
+
+    Promise.all([
+      window.db.clients.list(),
+      window.db.entries.forYear(year),
+    ]).then(([clients, entries]) => {
+
+      if (!clients.length) {
+        hideLoading();
+        emptyEl.classList.remove('hidden');
+        return;
+      }
+
+      // Group entries by client
+      const entriesByClient = {};
+      entries.forEach(e => {
+        if (!entriesByClient[e.client_id]) entriesByClient[e.client_id] = [];
+        entriesByClient[e.client_id].push(e);
+      });
+
+      const rows = clients.map(c => ({
+        client:  c,
+        entries: entriesByClient[c.id] || [],
+        agg:     window.aggregateEntries(entriesByClient[c.id] || []),
+      }));
+
+      renderTable(rows, year);
+      renderSummary(rows, year);
+      hideLoading();
+      tableWrap.classList.remove('hidden');
+      summaryEl.classList.remove('hidden');
+    }).catch(e => {
+      showError(e.message === 'NOT_CONFIGURED'
+        ? 'Keine Supabase-Verbindung. Bitte <a href="settings.html">Einstellungen</a> prüfen.'
+        : 'Fehler: ' + e.message);
+    });
+  }
+
+  // ── Render table ──────────────────────────────────────────────────────
+  function renderTable(rows, year) {
+    tbody.innerHTML = '';
+
+    rows.forEach((row, i) => {
+      const { client: c, entries: clientEntries, agg } = row;
+      const { amH, advH, flH, amTotal, breakdown } = agg;
+
+      // Annual budget = monthly budget × 12
+      const annualAmBdg  = c.am_budget  != null ? c.am_budget  * 12 : null;
+      const annualAdvBdg = c.adv_budget != null ? c.adv_budget * 12 : null;
+
+      const amDiff  = annualAmBdg  != null ? amTotal - annualAmBdg  : null;
+      const advDiff = annualAdvBdg != null ? advH    - annualAdvBdg : null;
+      const amOver  = amDiff  != null && amDiff  > 0.05;
+      const advOver = advDiff != null && advDiff > 0.05;
+      const amOk    = amDiff  != null && amDiff  <= 0.05;
+      const advOk   = advDiff != null && advDiff <= 0.05;
+
+      const total     = amTotal + advH;
+      const hasBudget = c.am_budget != null || c.adv_budget != null;
+      const totalBdg  = (annualAmBdg || 0) + (annualAdvBdg || 0);
+      const totalDiff = hasBudget ? total - totalBdg : null;
+
+      const overBadges = [];
+      if (amOver)  overBadges.push('<span class="badge badge-over">Account Mgmt</span>');
+      if (advOver) overBadges.push('<span class="badge badge-over">Advertising</span>');
+      const overHtml = overBadges.length
+        ? `<div class="over-badges">${overBadges.join('')}</div>`
+        : !hasBudget
+          ? '<span class="text-muted" style="font-size:12px">kein Budget</span>'
+          : '<span class="badge badge-ok">✓ Im Budget</span>';
+
+      const expandId = `am-expand-${i}`;
+      const btnId    = `am-btn-${i}`;
+      const hasAMData = breakdown.some(b => b.role === 'account_manager' || b.role === 'freelancer');
+
+      const amCellContent = hasAMData
+        ? `<button class="expand-btn" id="${btnId}" data-target="${expandId}">
+             ${window.svgChevron()} ${window.fmtHours(amTotal)}
+           </button>
+           ${amDiff != null ? `<div style="font-size:11.5px">${window.fmtDiff(amDiff).text}</div>` : ''}`
+        : `<div class="cell-hours">
+             <span class="h-main">${window.fmtHours(amTotal)}</span>
+             ${amDiff != null ? `<span class="h-diff">${window.fmtDiff(amDiff).text}</span>` : ''}
+           </div>`;
+
+      const totalDiffStr = totalDiff != null
+        ? `<div style="font-size:11.5px">${window.fmtDiff(totalDiff).text}</div>` : '';
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>
+          <a class="client-link" href="detail.html?id=${encodeURIComponent(c.id)}&name=${encodeURIComponent(c.name)}">
+            ${c.name} <span class="arrow">${window.svgArrow()}</span>
+          </a>
+        </td>
+        <td class="right ${amOver ? 'cell-over' : amOk ? 'cell-ok' : ''}">${amCellContent}</td>
+        <td class="right ${advOver ? 'cell-over' : advOk ? 'cell-ok' : ''}">
+          <div class="cell-hours">
+            <span class="h-main">${window.fmtHours(advH)}</span>
+            ${advDiff != null ? `<span class="h-diff">${window.fmtDiff(advDiff).text}</span>` : ''}
+          </div>
+        </td>
+        <td class="right mono">${window.fmtHours(total)}${totalDiffStr}</td>
+        <td class="center">${overHtml}</td>
+        <td class="center">
+          <a class="btn btn-ghost btn-sm" href="detail.html?id=${encodeURIComponent(c.id)}&name=${encodeURIComponent(c.name)}">
+            Details ${window.svgArrow()}
+          </a>
+        </td>`;
+
+      tbody.appendChild(tr);
+
+      // AM breakdown sub-row
+      if (hasAMData) {
+        const amItems = breakdown.filter(b => b.role === 'account_manager' || b.role === 'freelancer');
+        const amBreakdown = amItems.map(b => {
+          const isFL    = b.role === 'freelancer';
+          const counted = isFL ? b.hours / 3 : b.hours;
+          return `<span class="am-breakdown-item">
+            <span class="am-tag ${window.getRoleCls(b.role)}">${window.getRoleShort(b.role)}</span>
+            <span class="emp-hours">${window.fmtHours(b.hours)}</span>
+            <span>${b.name}</span>
+            ${isFL ? `<span class="fl-divider">÷3 = ${window.fmtHours(counted)}</span>` : ''}
+          </span>`;
+        }).join('');
+
+        const detailTr = document.createElement('tr');
+        detailTr.id        = expandId;
+        detailTr.className = 'am-breakdown-row hidden';
+        detailTr.innerHTML = `<td colspan="6"><div class="am-breakdown-inner">${amBreakdown}</div></td>`;
+        tbody.appendChild(detailTr);
+
+        tr.querySelector(`#${btnId}`)?.addEventListener('click', e => {
+          e.stopPropagation();
+          const btn  = document.getElementById(btnId);
+          const dest = document.getElementById(expandId);
+          const open = btn.classList.toggle('open');
+          dest.classList.toggle('hidden', !open);
+        });
+      }
+    });
+  }
+
+  // ── Summary stats ─────────────────────────────────────────────────────
+  function renderSummary(rows, year) {
+    let totAm = 0, totAdv = 0, totalBudget = 0, clientsOver = 0;
+    let hasBudget = false;
+    rows.forEach(({ client: c, agg }) => {
+      totAm  += agg.amTotal;
+      totAdv += agg.advH;
+      const annualAmBdg  = c.am_budget  != null ? c.am_budget  * 12 : null;
+      const annualAdvBdg = c.adv_budget != null ? c.adv_budget * 12 : null;
+      if (annualAmBdg != null || annualAdvBdg != null) {
+        hasBudget = true;
+        totalBudget += (annualAmBdg || 0) + (annualAdvBdg || 0);
+        if ((annualAmBdg  != null && agg.amTotal > annualAmBdg  + 0.05) ||
+            (annualAdvBdg != null && agg.advH    > annualAdvBdg + 0.05)) clientsOver++;
+      }
+    });
+    const total = totAm + totAdv;
+    const diff  = hasBudget ? total - totalBudget : null;
+    const diffR = diff != null ? window.fmtDiff(diff) : { text: '—', cls: 'zero' };
+
+    summaryEl.innerHTML = `
+      <div class="stats-row">
+        <div class="stat-card"><div class="label">Account Mgmt ${year}</div><div class="value">${window.fmtHours(totAm)}</div></div>
+        <div class="stat-card"><div class="label">Advertising ${year}</div><div class="value">${window.fmtHours(totAdv)}</div></div>
+        <div class="stat-card"><div class="label">Gesamt ${year}</div><div class="value">${window.fmtHours(total)}</div></div>
+        ${hasBudget ? `
+        <div class="stat-card"><div class="label">Differenz Jahresbudget</div>
+          <div class="value ${diffR.cls === 'positive' ? 'over' : diffR.cls === 'negative' ? 'under' : ''}">${diffR.text}</div></div>
+        <div class="stat-card"><div class="label">Kunden über Budget</div>
+          <div class="value ${clientsOver > 0 ? 'over' : ''}">${clientsOver} / ${rows.length}</div></div>` : ''}
+      </div>`;
+  }
+
+  // ── Clockify year sync ────────────────────────────────────────────────
+  function norm(str) { return (str || '').trim().toLowerCase(); }
+
+  async function syncFromClockify() {
+    if (!window.clockify.isConfigured()) {
+      showError('Clockify nicht verbunden. Bitte zuerst in den <a href="settings.html">Einstellungen</a> den API Key eintragen.');
+      return;
+    }
+
+    const year = parseInt(yearSel.value);
+    const ym   = window.currentYearMonth();
+    // Sync all months up to current month for current year, all 12 for past years
+    const maxMonth = year < ym.year ? 12 : ym.month;
+
+    syncBtn.disabled = true;
+    errorEl.innerHTML = '';
+
+    try {
+      // Load clients + employees in parallel
+      const [clients, employees] = await Promise.all([
+        window.db.clients.list(),
+        window.db.employees.listActive(),
+      ]);
+
+      const clientMap   = {};
+      clients.forEach(c   => { clientMap[norm(c.name)]   = c; });
+      const employeeMap = {};
+      employees.forEach(e => { employeeMap[norm(e.name)] = e; });
+
+      const saves     = [];
+      const unmatched = { projects: new Set(), users: new Set() };
+      let   matched   = 0;
+
+      // Fetch all months sequentially with progress
+      for (let m = 1; m <= maxMonth; m++) {
+        syncBtn.textContent = `Synchronisiere ${window.MONTHS_DE[m - 1]}… (${m}/${maxMonth})`;
+        const cfMap = await window.clockify.fetchMonth(year, m);
+
+        Object.keys(cfMap).forEach(projKey => {
+          const client = clientMap[projKey];
+          if (!client) { unmatched.projects.add(projKey); return; }
+
+          Object.keys(cfMap[projKey]).forEach(userKey => {
+            const emp   = employeeMap[userKey];
+            const hours = cfMap[projKey][userKey];
+            if (!emp) { unmatched.users.add(userKey); return; }
+            saves.push(window.db.entries.upsert(
+              client.id, emp.id, year, m,
+              Math.round(hours * 4) / 4  // round to nearest 0.25h
+            ));
+            matched++;
+          });
+        });
+      }
+
+      syncBtn.textContent = `Speichere ${matched} Einträge…`;
+      await Promise.all(saves);
+
+      // Warnings for unmatched
+      const warns = [];
+      if (unmatched.projects.size) warns.push('Nicht zugeordnete Projekte: <strong>' + [...unmatched.projects].join(', ') + '</strong>');
+      if (unmatched.users.size)    warns.push('Nicht zugeordnete Nutzer: <strong>'   + [...unmatched.users].join(', ')    + '</strong>');
+      if (warns.length) showWarn(warns.join('<br>'));
+
+      syncBtn.textContent = `✓ ${matched} Einträge synchronisiert`;
+      setTimeout(() => { syncBtn.textContent = 'Von Clockify sync'; }, 3000);
+      loadData();
+
+    } catch (e) {
+      showError('Clockify Fehler: ' + e.message);
+      syncBtn.textContent = 'Von Clockify sync';
+    } finally {
+      syncBtn.disabled = false;
+    }
+  }
+
+  // ── Boot ──────────────────────────────────────────────────────────────
+  if (!window.isConfigured()) {
+    setupHint.classList.remove('hidden');
+  } else {
+    loadData();
+  }
+  loadBtn.addEventListener('click', loadData);
+  syncBtn.addEventListener('click', syncFromClockify);
+})();
