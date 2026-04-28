@@ -63,6 +63,13 @@
     if (!cs) return false;
     return year < cs.year || (year === cs.year && month < cs.month);
   }
+  function isAfterProject(year, month, client) {
+    if (!client.is_project || !client.project_end) return false;
+    var d   = new Date(client.project_end);
+    var peY = d.getUTCFullYear();
+    var peM = d.getUTCMonth() + 1;
+    return year > peY || (year === peY && month > peM);
+  }
   var modalState     = null; // { year, month }
   var adjState       = null; // { year, month, existing: adj|null }
 
@@ -170,16 +177,18 @@
       var advH    = syncAdvH    + adjAdv;
       var total   = amTotal + advH;
 
-      // No budget comparison for months before contract start
+      // No budget comparison for months outside contract/project period
       var beforeContract = isBeforeContract(year, month, client);
-      var amDiff  = (!beforeContract && client.am_budget  != null) ? amTotal - client.am_budget  : null;
-      var advDiff = (!beforeContract && client.adv_budget != null) ? advH    - client.adv_budget : null;
+      var afterProject   = isAfterProject(year, month, client);
+      var outOfPeriod    = beforeContract || afterProject;
+      var amDiff  = (!outOfPeriod && client.am_budget  != null) ? amTotal - client.am_budget  : null;
+      var advDiff = (!outOfPeriod && client.adv_budget != null) ? advH    - client.adv_budget : null;
       var amOver  = amDiff  != null && amDiff  > 0.05;
       var advOver = advDiff != null && advDiff > 0.05;
       var amOk    = amDiff  != null && amDiff  <= 0.05;
       var advOk   = advDiff != null && advDiff <= 0.05;
 
-      var hasBudget = !beforeContract && (client.am_budget != null || client.adv_budget != null);
+      var hasBudget = !outOfPeriod && (client.am_budget != null || client.adv_budget != null);
       var totalBdg  = (client.am_budget || 0) + (client.adv_budget || 0);
       var totalDiff = hasBudget ? total - totalBdg : null;
 
@@ -190,6 +199,8 @@
         ? '<span class="text-muted">–</span>'
         : beforeContract
           ? '<span class="text-muted" style="font-size:11px">vor Vertragsstart</span>'
+          : afterProject
+          ? '<span class="text-muted" style="font-size:11px">Projekt beendet</span>'
           : overBadges.length
             ? '<div class="over-badges">' + overBadges.join('') + '</div>'
             : hasBudget
@@ -343,6 +354,7 @@
     for (var m = 1; m <= 12; m++) {
       if (year > ym.year || (year === ym.year && m > ym.month)) continue;
       if (isBeforeContract(year, m, client)) continue;
+      if (isAfterProject(year, m, client))  continue;
       var agg    = window.aggregateEntries(entriesByMonth[m] || []);
       var adj    = adjByMonth[m] || null;
       totAm  += agg.amTotal + (adj ? adj.am_hours  || 0 : 0);

@@ -17,6 +17,15 @@
   var clientAmEmpSelect  = document.getElementById('clientAmEmpSelect');
   var clientAdvEmpSelect = document.getElementById('clientAdvEmpSelect');
   var clientStartInput   = document.getElementById('clientStartInput');
+  var clientEndInput     = document.getElementById('clientEndInput');
+  var clientIsProject    = document.getElementById('clientIsProject');
+  var projectEndField    = document.getElementById('projectEndField');
+
+  // Show/hide project end field based on checkbox
+  clientIsProject.addEventListener('change', function () {
+    projectEndField.style.display = clientIsProject.checked ? '' : 'none';
+    if (!clientIsProject.checked) clientEndInput.value = '';
+  });
   var clientModalClose   = document.getElementById('clientModalClose');
   var clientModalCancel  = document.getElementById('clientModalCancel');
   var clientModalSave    = document.getElementById('clientModalSave');
@@ -104,9 +113,12 @@
     clientAdvInput.value  = client && client.adv_budget != null ? client.adv_budget : '';
     clientAmEmpSelect.value  = (client && client.am_employee_id)  || '';
     clientAdvEmpSelect.value = (client && client.adv_employee_id) || '';
-    // contract_start is stored as "YYYY-MM-DD", input[type=month] needs "YYYY-MM"
     clientStartInput.value   = (client && client.contract_start)
       ? client.contract_start.substring(0, 7) : '';
+    clientIsProject.checked  = !!(client && client.is_project);
+    clientEndInput.value     = (client && client.project_end)
+      ? client.project_end.substring(0, 7) : '';
+    projectEndField.style.display = clientIsProject.checked ? '' : 'none';
     clientModal.classList.remove('hidden');
     clientNameInput.focus();
   }
@@ -127,16 +139,19 @@
     var advEmp = clientAdvEmpSelect.value || null;
     // Store as "YYYY-MM-01" date string (Postgres date column)
     var contractStart = clientStartInput.value ? clientStartInput.value + '-01' : null;
+    var isProject     = clientIsProject.checked;
+    var projectEnd    = (isProject && clientEndInput.value) ? clientEndInput.value + '-01' : null;
 
     clientModalSave.disabled    = true;
     clientModalSave.textContent = 'Speichern…';
 
     var fields = { name: name, am_budget: am, adv_budget: adv,
                    am_employee_id: amEmp, adv_employee_id: advEmp,
-                   contract_start: contractStart };
+                   contract_start: contractStart,
+                   is_project: isProject, project_end: projectEnd };
     var promise = editingClientId
       ? window.db.clients.update(editingClientId, fields)
-      : window.db.clients.create(name, am, adv, amEmp, advEmp, contractStart);
+      : window.db.clients.create(name, am, adv, amEmp, advEmp, contractStart, isProject, projectEnd);
 
     promise.then(function () {
       closeClientModal();
@@ -212,6 +227,24 @@
     return '<span style="font-size:13px;font-weight:500">' + emp.name + '</span>';
   }
 
+  function typeBadge(c) {
+    if (!c.is_project) return '<span class="type-badge type-retainer">Retainer</span>';
+    var label = 'Projekt';
+    if (c.contract_start || c.project_end) {
+      var parts = [];
+      if (c.contract_start) parts.push(fmtMonthShort(c.contract_start));
+      if (c.project_end)    parts.push(fmtMonthShort(c.project_end));
+      if (parts.length) label += '<br><span style="font-size:10px;font-weight:400">' + parts.join(' – ') + '</span>';
+    }
+    return '<span class="type-badge type-project">' + label + '</span>';
+  }
+
+  function fmtMonthShort(dateStr) {
+    if (!dateStr) return '';
+    var d = new Date(dateStr);
+    return window.MONTHS_DE[d.getUTCMonth()].slice(0, 3) + ' ' + d.getUTCFullYear();
+  }
+
   function renderTable(clients) {
     tbody.innerHTML = '';
 
@@ -237,6 +270,7 @@
             ' style="accent-color:var(--primary);width:15px;height:15px;cursor:pointer">' +
         '</td>' +
         '<td><a class="client-link" href="detail.html?id=' + encodeURIComponent(c.id) + '&name=' + encodeURIComponent(c.name) + '" style="font-weight:500">' + c.name + '</a></td>' +
+        '<td>' + typeBadge(c) + '</td>' +
         '<td class="right" style="font-variant-numeric:tabular-nums">' +
           (c.am_budget  != null ? '<strong>' + window.fmtHours(c.am_budget)  + '</strong> <span style="font-size:12px;color:var(--text-muted)">/ Monat</span>' : '<span class="text-muted">—</span>') +
         '</td>' +

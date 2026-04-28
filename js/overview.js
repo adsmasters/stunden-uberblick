@@ -14,13 +14,25 @@
 
   // ── Contract start helpers ────────────────────────────────────────────
   function effectiveMonths(client, year, maxMonth) {
-    if (!client.contract_start) return maxMonth;
-    const d  = new Date(client.contract_start);
-    const csY = d.getUTCFullYear();
-    const csM = d.getUTCMonth() + 1;
-    if (csY > year) return 0;               // contract hasn't started this year
-    const startM = csY === year ? csM : 1;  // if started in a previous year, full year counts
-    return Math.max(0, maxMonth - startM + 1);
+    // Determine start month for this year
+    let startM = 1;
+    if (client.contract_start) {
+      const d   = new Date(client.contract_start);
+      const csY = d.getUTCFullYear();
+      const csM = d.getUTCMonth() + 1;
+      if (csY > year) return 0;
+      if (csY === year) startM = csM;
+    }
+    // Determine end month for this year
+    let endM = maxMonth;
+    if (client.is_project && client.project_end) {
+      const d   = new Date(client.project_end);
+      const peY = d.getUTCFullYear();
+      const peM = d.getUTCMonth() + 1;
+      if (peY < year) return 0;                        // project ended before this year
+      if (peY === year) endM = Math.min(maxMonth, peM); // cap at project end
+    }
+    return Math.max(0, endM - startM + 1);
   }
 
   // ── Sort state ────────────────────────────────────────────────────────
