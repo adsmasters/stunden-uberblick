@@ -52,6 +52,7 @@
       <table>
         <thead>
           <tr>
+            <th style="width:40px;padding-right:4px"><input type="checkbox" id="selectAll" style="accent-color:var(--primary);width:15px;height:15px;cursor:pointer"></th>
             <th style="min-width:200px">Kundenname</th>
             <th class="right" style="min-width:160px">Budget AM</th>
             <th class="right" style="min-width:160px">Budget Advertising</th>
@@ -112,6 +113,11 @@
             <option value="">— kein —</option>
           </select>
         </div>
+      </div>
+      <div class="field">
+        <label for="clientStartInput">Vertragsstart <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
+        <input type="month" id="clientStartInput">
+        <span class="hint">Budget-Vergleich wird erst ab diesem Monat gerechnet</span>
       </div>
     </div>
     <div class="modal-footer">

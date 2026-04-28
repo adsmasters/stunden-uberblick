@@ -189,10 +189,11 @@ where email = 'amazon@adsmasters.de';</pre>
           Führe diese SQLs einmalig im SQL Editor aus:
         </p>
         <div class="code-block-wrap">
-          <pre class="code-block">-- Bearbeiter-Spalten für Kunden
+          <pre class="code-block">-- Bearbeiter-Spalten + Vertragsstart für Kunden
 alter table clients
   add column if not exists am_employee_id  uuid references employees(id) on delete set null,
-  add column if not exists adv_employee_id uuid references employees(id) on delete set null;
+  add column if not exists adv_employee_id uuid references employees(id) on delete set null,
+  add column if not exists contract_start  date;
 
 -- Monatliche Korrekturen pro Kunde
 create table if not exists adjustments (
