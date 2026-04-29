@@ -154,7 +154,23 @@
         empEntries[u.employee_id][u.month] = u.hours || 0;
       });
 
-      renderTable(employees, empEntries, available, netAvail, workDays, year, pct, subtract, holidayDays);
+      // ── Forecast: rolling 3-month average per employee ────────────────
+      var forecastByEmp = {};
+      if (year === ym.year && ym.month < 12) {
+        employees.forEach(function (emp) {
+          var monthMap = empEntries[emp.id] || {};
+          var recent = [];
+          for (var fm = ym.month; fm >= 1 && recent.length < 3; fm--) {
+            if (monthMap[fm] > 0) recent.push(monthMap[fm]);
+          }
+          if (recent.length > 0) {
+            var avg = recent.reduce(function (a, b) { return a + b; }, 0) / recent.length;
+            forecastByEmp[emp.id] = Math.round(avg * 4) / 4;
+          }
+        });
+      }
+
+      renderTable(employees, empEntries, forecastByEmp, available, netAvail, workDays, year, pct, subtract, holidayDays);
       renderHolidayInfo(year);
       hideLoading();
       tableWrap.classList.remove('hidden');
@@ -165,7 +181,7 @@
   }
 
   // ── Render table ──────────────────────────────────────────────────────
-  function renderTable(employees, empEntries, available, netAvail, workDays, year, pct, subtract, holidayDays) {
+  function renderTable(employees, empEntries, forecastByEmp, available, netAvail, workDays, year, pct, subtract, holidayDays) {
     var ym = window.currentYearMonth();
 
     // Build info bar
@@ -221,7 +237,22 @@
         total += hrs;
 
         if (isFuture) {
-          cells += '<td class="center util-bar-cell"><span class="text-muted" style="font-size:12px">—</span></td>';
+          var fcast = forecastByEmp[emp.id];
+          if (fcast) {
+            var fnet = netAvail[m];
+            var fPct = fnet > 0 ? (fcast / fnet) * 100 : 0;
+            var fCls = fPct > 100 ? 'high' : fPct > 80 ? 'medium' : 'low';
+            var fW   = Math.min(fPct, 100).toFixed(0);
+            cells += '<td class="center util-bar-cell" style="opacity:.5">' +
+              '<div class="util-bar-wrap">' +
+                '<div style="font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;margin-bottom:2px;font-style:italic">~' + window.fmtHours(fcast) + '</div>' +
+                '<div class="util-bar-track"><div class="util-bar-fill ' + fCls + '" style="width:' + fW + '%;background-image:repeating-linear-gradient(45deg,transparent,transparent 3px,rgba(255,255,255,.35) 3px,rgba(255,255,255,.35) 6px)"></div></div>' +
+                '<div class="util-bar-label" style="font-style:italic">~' + Math.round(fPct) + '%</div>' +
+              '</div>' +
+            '</td>';
+          } else {
+            cells += '<td class="center util-bar-cell"><span class="text-muted" style="font-size:12px">—</span></td>';
+          }
           return;
         }
 
@@ -242,15 +273,31 @@
         '</td>';
       });
 
+      // Jahresprognose: actual + (remaining months × forecast)
+      var fcast = forecastByEmp[emp.id];
+      var remainingMonths = year === ym.year ? 12 - ym.month : 0;
+      var projected = fcast ? total + fcast * remainingMonths : null;
+
       html += '<tr>' +
         '<td style="font-weight:500;position:sticky;left:0;background:var(--surface);z-index:1">' + emp.name + '</td>' +
         '<td><span class="role-badge ' + window.getRoleCls(emp.role) + '">' + window.getRoleShort(emp.role) + '</span></td>' +
         cells +
-        '<td class="right" style="font-weight:600;font-variant-numeric:tabular-nums">' + (total > 0 ? window.fmtHours(total) : '—') + '</td>' +
+        '<td class="right" style="font-variant-numeric:tabular-nums">' +
+          '<div style="font-weight:600">' + (total > 0 ? window.fmtHours(total) : '—') + '</div>' +
+          (projected ? '<div style="font-size:11px;color:var(--text-muted);font-style:italic;margin-top:2px">~' + window.fmtHours(projected) + ' Prog.</div>' : '') +
+        '</td>' +
       '</tr>';
     });
 
     html += '</tbody></table></div>';
+
+    // Legend (only when forecast is shown)
+    var hasForecast = Object.keys(forecastByEmp).length > 0;
+    if (hasForecast) {
+      html += '<div style="margin-top:10px;font-size:11px;color:var(--text-muted);padding:0 4px">' +
+        '<span style="opacity:.5;font-style:italic">~ Prognose</span> · Ø der letzten 3 Monate · gedimmte Zellen = Schätzwerte</div>';
+    }
+
     tableWrap.innerHTML = html;
   }
 
