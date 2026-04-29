@@ -195,20 +195,26 @@
   function renderTable(employees, empEntries, forecastByEmp, available, netAvail, workDays, year, pct, subtract, holidayDays) {
     var ym = window.currentYearMonth();
 
+    // Pre-calculate team forecast total (sum of all employees)
+    var teamFcast = employees.reduce(function (sum, emp) {
+      return sum + (forecastByEmp[emp.id] || 0);
+    }, 0);
+
     // Build info bar
     infoBar.innerHTML = '<div class="stats-row">' +
       window.MONTHS_DE.map(function (mn, i) {
         var m = i + 1;
         var isFuture = year > ym.year || (year === ym.year && m > ym.month);
-        return '<div class="stat-card" style="padding:10px 14px">' +
+        var dayLabel = (subtract && holidayDays[m]
+          ? (workDays[m] - holidayDays[m]) + ' AT <span style="color:var(--text-muted)">(-' + holidayDays[m] + ' FT)</span>'
+          : workDays[m] + ' AT') +
+          (pct > 0 ? ' · <span style="color:var(--warning)">' + pct + '% intern</span>' : '');
+        return '<div class="stat-card" style="padding:10px 14px' + (isFuture ? ';opacity:.6' : '') + '">' +
           '<div class="label" style="font-size:10px">' + mn.substring(0,3) + '</div>' +
-          '<div style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums">' +
-            (isFuture ? '<span class="text-muted">—</span>' : window.fmtHours(netAvail[m])) +
+          '<div style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums' + (isFuture ? ';font-style:italic' : '') + '">' +
+            window.fmtHours(netAvail[m]) +
           '</div>' +
-          '<div style="font-size:10px;color:var(--text-muted)">' +
-            (subtract && holidayDays[m] ? (workDays[m] - holidayDays[m]) + ' AT <span style="color:var(--text-muted)">(-' + holidayDays[m] + ' FT)</span>' : workDays[m] + ' AT') +
-            (pct > 0 ? ' · <span style="color:var(--warning)">' + pct + '% intern</span>' : '') +
-          '</div>' +
+          '<div style="font-size:10px;color:var(--text-muted)">' + dayLabel + '</div>' +
         '</div>';
       }).join('') +
     '</div>';
