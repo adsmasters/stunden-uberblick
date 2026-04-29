@@ -28,7 +28,7 @@
     localStorage.setItem('internalPct', internalPct.value);
   });
 
-  deductHolidays.addEventListener('change', function () {
+  deductHolidays.addEventListener('click', function () {
     localStorage.setItem('deductHolidays', deductHolidays.checked ? '1' : '0');
     loadData();
   });
