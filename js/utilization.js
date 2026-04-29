@@ -172,8 +172,8 @@
           }
           if (recent.length > 0) {
             var avg = recent.reduce(function (a, b) { return a + b; }, 0) / recent.length;
-            // Store client-hours average; total forecast = avg / 0.85 (15% internal)
-            forecastByEmp[emp.id] = Math.round((avg / 0.85) * 4) / 4;
+            // Store pure client hours avg; internal portion added per month in renderTable
+            forecastByEmp[emp.id] = Math.round(avg * 4) / 4;
           }
         });
       }
@@ -260,7 +260,8 @@
         total += hrs;
 
         if (isFuture) {
-          var fcast = forecastByEmp[emp.id];
+          var fcastClient = forecastByEmp[emp.id];
+          var fcast = fcastClient ? Math.round((fcastClient + netAvail[m] * 0.15) * 4) / 4 : null;
           if (fcast) {
             var fnet = netAvail[m];
             var fPct = fnet > 0 ? (fcast / fnet) * 100 : 0;
@@ -299,10 +300,16 @@
         '</td>';
       });
 
-      // Jahresprognose: actual + (remaining months × forecast)
-      var fcast = forecastByEmp[emp.id];
-      var remainingMonths = year === ym.year ? 12 - ym.month : 0;
-      var projected = fcast ? total + fcast * remainingMonths : null;
+      // Jahresprognose: actual + sum of monthly forecasts for remaining months
+      var fcastClient = forecastByEmp[emp.id];
+      var projected = null;
+      if (fcastClient) {
+        var projSum = 0;
+        for (var pm = ym.month + 1; pm <= 12; pm++) {
+          projSum += fcastClient + netAvail[pm] * 0.15;
+        }
+        projected = total + Math.round(projSum * 4) / 4;
+      }
 
       html += '<tr>' +
         '<td style="font-weight:500;position:sticky;left:0;background:var(--surface);z-index:1">' + emp.name + '</td>' +
