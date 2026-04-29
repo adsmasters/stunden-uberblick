@@ -289,7 +289,10 @@
             ${advDiff != null ? `<span class="h-diff">${window.fmtDiff(advDiff).text}</span>` : ''}
           </div>
         </td>
-        <td class="right mono">${window.fmtHours(total)}${totalDiffStr}</td>
+        <td class="right mono">${window.fmtHours(total)}</td>
+        <td class="right mono ${totalDiff != null && totalDiff > 0.05 ? 'diff-over' : totalDiff != null && totalDiff < -0.05 ? 'diff-under' : ''}" style="font-weight:600">
+          ${totalDiff != null ? window.fmtDiff(totalDiff).text : '<span class="text-muted">—</span>'}
+        </td>
         <td class="center">${overHtml}</td>
         <td class="center">
           <a class="btn btn-ghost btn-sm" href="detail.html?id=${encodeURIComponent(c.id)}&name=${encodeURIComponent(c.name)}">
