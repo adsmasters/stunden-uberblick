@@ -2,7 +2,6 @@
   'use strict';
 
   var yearSel        = document.getElementById('yearSelect');
-  var internalPct    = document.getElementById('internalPct');
   var deductHolidays = document.getElementById('deductHolidays');
   var loadBtn        = document.getElementById('loadBtn');
   var tableWrap   = document.getElementById('tableWrap');
@@ -20,13 +19,8 @@
       o.value = y; o.textContent = y;
       yearSel.appendChild(o);
     }
-    internalPct.value = localStorage.getItem('internalPct') || '0';
     deductHolidays.checked = localStorage.getItem('deductHolidays') === '1';
   })();
-
-  internalPct.addEventListener('change', function () {
-    localStorage.setItem('internalPct', internalPct.value);
-  });
 
   // Dashlane intercepts clicks on the checkbox itself — listen on label instead
   var deductHolidaysLabel = document.querySelector('label[for="deductHolidays"]');
@@ -120,19 +114,18 @@
   // ── Load data ─────────────────────────────────────────────────────────
   function loadData() {
     showLoading();
-    var ym         = window.currentYearMonth();
-    var year       = parseInt(yearSel.value);
-    var pct        = parseFloat(internalPct.value) || 0;
-    var subtract   = deductHolidays.checked;
+    var ym          = window.currentYearMonth();
+    var year        = parseInt(yearSel.value);
+    var subtract    = deductHolidays.checked;
     var holidayDays = subtract ? holidayWorkdaysByMonth(year) : {};
 
-    // Pre-compute available hours so renderTable can use them from closure
+    // Pre-compute available hours
     var available = {}, netAvail = {}, workDays = {};
     for (var m = 1; m <= 12; m++) {
       workDays[m]  = getWorkDays(year, m);
       var effDays  = workDays[m] - (holidayDays[m] || 0);
       available[m] = effDays * 8;
-      netAvail[m]  = available[m] * (1 - pct / 100);
+      netAvail[m]  = available[m];
     }
 
     Promise.all([
@@ -176,12 +169,26 @@
           }
           if (recent.length > 0) {
             var avg = recent.reduce(function (a, b) { return a + b; }, 0) / recent.length;
-            forecastByEmp[emp.id] = Math.round(avg * 4) / 4;
+            // Store client-hours average; total forecast = avg / 0.85 (15% internal)
+            forecastByEmp[emp.id] = Math.round((avg / 0.85) * 4) / 4;
           }
         });
       }
 
-      renderTable(employees, empEntries, forecastByEmp, available, netAvail, workDays, year, pct, subtract, holidayDays);
+      // ── Internal % per employee per month (util_hours vs client entries) ─
+      var internalPctByEmp = {};
+      employees.forEach(function (emp) {
+        internalPctByEmp[emp.id] = {};
+        for (var mi = 1; mi <= 12; mi++) {
+          var tot = (empEntries[emp.id] || {})[mi] || 0;
+          var cli = (entriesPerEmp[emp.id] || {})[mi] || 0;
+          if (tot > 0) {
+            internalPctByEmp[emp.id][mi] = Math.round(Math.max(0, tot - cli) / tot * 100);
+          }
+        }
+      });
+
+      renderTable(employees, empEntries, forecastByEmp, internalPctByEmp, available, netAvail, workDays, year, subtract, holidayDays);
       renderHolidayInfo(year);
       hideLoading();
       tableWrap.classList.remove('hidden');
@@ -192,7 +199,7 @@
   }
 
   // ── Render table ──────────────────────────────────────────────────────
-  function renderTable(employees, empEntries, forecastByEmp, available, netAvail, workDays, year, pct, subtract, holidayDays) {
+  function renderTable(employees, empEntries, forecastByEmp, internalPctByEmp, available, netAvail, workDays, year, subtract, holidayDays) {
     var ym = window.currentYearMonth();
 
     // Pre-calculate team forecast total (sum of all employees)
@@ -205,10 +212,9 @@
       window.MONTHS_DE.map(function (mn, i) {
         var m = i + 1;
         var isFuture = year > ym.year || (year === ym.year && m > ym.month);
-        var dayLabel = (subtract && holidayDays[m]
+        var dayLabel = subtract && holidayDays[m]
           ? (workDays[m] - holidayDays[m]) + ' AT <span style="color:var(--text-muted)">(-' + holidayDays[m] + ' FT)</span>'
-          : workDays[m] + ' AT') +
-          (pct > 0 ? ' · <span style="color:var(--warning)">' + pct + '% intern</span>' : '');
+          : workDays[m] + ' AT';
         return '<div class="stat-card" style="padding:10px 14px' + (isFuture ? ';opacity:.6' : '') + '">' +
           '<div class="label" style="font-size:10px">' + mn.substring(0,3) + '</div>' +
           '<div style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums' + (isFuture ? ';font-style:italic' : '') + '">' +
@@ -230,13 +236,10 @@
     window.MONTHS_DE.forEach(function (mn, i) {
       var m = i + 1;
       var isFuture = year > ym.year || (year === ym.year && m > ym.month);
-      var hdNote = '';
-      if (!isFuture) {
-        hdNote = window.fmtHours(netAvail[m]);
-        if (subtract && holidayDays[m]) hdNote += ' <span style="color:var(--text-muted)">-' + holidayDays[m] + 'FT</span>';
-      }
-      html += '<th class="center util-bar-cell" style="min-width:90px">' + mn.substring(0,3) +
-        (isFuture ? '' : '<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:1px">' + hdNote + '</div>') +
+      var hdNote = window.fmtHours(netAvail[m]);
+      if (subtract && holidayDays[m]) hdNote += ' <span style="color:var(--text-muted)">-' + holidayDays[m] + 'FT</span>';
+      html += '<th class="center util-bar-cell" style="min-width:90px' + (isFuture ? ';opacity:.6' : '') + '">' + mn.substring(0,3) +
+        '<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:1px' + (isFuture ? ';font-style:italic' : '') + '">' + hdNote + '</div>' +
         '</th>';
     });
     html += '<th class="right" style="min-width:90px">Gesamt</th></tr></thead><tbody>';
@@ -265,6 +268,7 @@
                 '<div style="font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;margin-bottom:2px;font-style:italic">~' + window.fmtHours(fcast) + '</div>' +
                 '<div class="util-bar-track"><div class="util-bar-fill ' + fCls + '" style="width:' + fW + '%;background-image:repeating-linear-gradient(45deg,transparent,transparent 3px,rgba(255,255,255,.35) 3px,rgba(255,255,255,.35) 6px)"></div></div>' +
                 '<div class="util-bar-label" style="font-style:italic">~' + Math.round(fPct) + '%</div>' +
+                '<div style="font-size:9px;color:var(--text-muted);font-style:italic;margin-top:1px">15% intern</div>' +
               '</div>' +
             '</td>';
           } else {
@@ -277,6 +281,7 @@
         var pctUsed = net > 0 ? (hrs / net) * 100 : 0;
         var fillCls = pctUsed > 100 ? 'high' : pctUsed > 80 ? 'medium' : 'low';
         var fillW   = Math.min(pctUsed, 100).toFixed(0);
+        var intPct  = (internalPctByEmp[emp.id] || {})[m];
 
         cells += '<td class="center util-bar-cell' +
           (pctUsed > 100 ? ' cell-over' : '') + '">' +
@@ -286,6 +291,7 @@
             '</div>' +
             (hrs > 0 ? '<div class="util-bar-track"><div class="util-bar-fill ' + fillCls + '" style="width:' + fillW + '%"></div></div>' : '') +
             (hrs > 0 ? '<div class="util-bar-label">' + Math.round(pctUsed) + '%</div>' : '') +
+            (hrs > 0 && intPct !== undefined ? '<div style="font-size:9px;color:var(--text-muted);margin-top:1px">' + intPct + '% intern</div>' : '') +
           '</div>' +
         '</td>';
       });
@@ -312,7 +318,7 @@
     var hasForecast = Object.keys(forecastByEmp).length > 0;
     if (hasForecast) {
       html += '<div style="margin-top:10px;font-size:11px;color:var(--text-muted);padding:0 4px">' +
-        '<span style="opacity:.5;font-style:italic">~ Prognose</span> · Ø der letzten 3 Monate (Kundenstunden) · gedimmte Zellen = Schätzwerte</div>';
+        '<span style="opacity:.5;font-style:italic">~ Prognose</span> · Ø letzte 3 Monate (Kundenstunden) + 15% interne Zeit · gedimmte Zellen = Schätzwerte</div>';
     }
 
     tableWrap.innerHTML = html;
