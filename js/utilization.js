@@ -132,10 +132,12 @@
       window.db.employees.listActive(),
       window.db.utilHours.forYear(year),
       window.db.entries.forYear(year),
+      window.db.clients.list(),
     ]).then(function (results) {
       var employees   = results[0];
       var utilData    = results[1];
       var entriesData = results[2];
+      var clientsData = results[3];
 
       if (!employees.length) {
         hideLoading();
@@ -161,21 +163,35 @@
           (entriesPerEmp[e.employee_id][e.month] || 0) + (e.hours || 0);
       });
 
-      // ── Forecast: rolling 3-month average from client entries ─────────
-      var forecastByEmp = {};
+      // ── Forecast: sum of client budgets per employee per future month ────
+      // For each future month, sum AM/ADV budgets of active clients per employee
+      var forecastByEmp = {}; // { empId: { month: clientBudgetHours } }
       if (year === ym.year && ym.month < 12) {
-        employees.forEach(function (emp) {
-          var monthMap = entriesPerEmp[emp.id] || {};
-          var recent = [];
-          for (var fm = ym.month; fm >= 1 && recent.length < 3; fm--) {
-            if (monthMap[fm] > 0) recent.push(monthMap[fm]);
-          }
-          if (recent.length > 0) {
-            var avg = recent.reduce(function (a, b) { return a + b; }, 0) / recent.length;
-            // Store pure client hours avg; internal portion added per month in renderTable
-            forecastByEmp[emp.id] = Math.round(avg * 4) / 4;
-          }
-        });
+        for (var fm = ym.month + 1; fm <= 12; fm++) {
+          employees.forEach(function (emp) {
+            var budgetSum = 0;
+            clientsData.forEach(function (c) {
+              // Respect contract_start
+              if (c.contract_start) {
+                var cs = new Date(c.contract_start);
+                var csY = cs.getUTCFullYear(), csM = cs.getUTCMonth() + 1;
+                if (csY > year || (csY === year && fm < csM)) return;
+              }
+              // Respect project_end
+              if (c.is_project && c.project_end) {
+                var pe = new Date(c.project_end);
+                var peY = pe.getUTCFullYear(), peM = pe.getUTCMonth() + 1;
+                if (year > peY || (year === peY && fm > peM)) return;
+              }
+              if (c.am_employee_id  === emp.id && c.am_budget)  budgetSum += c.am_budget;
+              if (c.adv_employee_id === emp.id && c.adv_budget) budgetSum += c.adv_budget;
+            });
+            if (budgetSum > 0) {
+              if (!forecastByEmp[emp.id]) forecastByEmp[emp.id] = {};
+              forecastByEmp[emp.id][fm] = budgetSum;
+            }
+          });
+        }
       }
 
       // ── Internal % from util_hours.intern_hours (synced from Clockify) ──
@@ -205,10 +221,13 @@
   function renderTable(employees, empEntries, forecastByEmp, internalPctByEmp, available, netAvail, workDays, year, subtract, holidayDays) {
     var ym = window.currentYearMonth();
 
-    // Pre-calculate team forecast total (sum of all employees)
-    var teamFcast = employees.reduce(function (sum, emp) {
-      return sum + (forecastByEmp[emp.id] || 0);
-    }, 0);
+    // Pre-calculate team forecast per month (sum of all employees)
+    var teamFcastByMonth = {};
+    for (var tfm = 1; tfm <= 12; tfm++) {
+      teamFcastByMonth[tfm] = employees.reduce(function (sum, emp) {
+        return sum + ((forecastByEmp[emp.id] || {})[tfm] || 0);
+      }, 0);
+    }
 
     // Build info bar
     infoBar.innerHTML = '<div class="stats-row">' +
@@ -218,6 +237,7 @@
         var dayLabel = subtract && holidayDays[m]
           ? (workDays[m] - holidayDays[m]) + ' AT <span style="color:var(--text-muted)">(-' + holidayDays[m] + ' FT)</span>'
           : workDays[m] + ' AT';
+        var teamF = isFuture ? teamFcastByMonth[m] : 0;
         return '<div class="stat-card" style="padding:10px 14px' + (isFuture ? ';opacity:.6' : '') + '">' +
           '<div class="label" style="font-size:10px">' + mn.substring(0,3) + '</div>' +
           '<div style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums' + (isFuture ? ';font-style:italic' : '') + '">' +
@@ -260,7 +280,7 @@
         total += hrs;
 
         if (isFuture) {
-          var fcastClient = forecastByEmp[emp.id];
+          var fcastClient = (forecastByEmp[emp.id] || {})[m] || 0;
           var fcast = fcastClient ? Math.round((fcastClient + netAvail[m] * 0.15) * 4) / 4 : null;
           if (fcast) {
             var fnet = netAvail[m];
@@ -301,14 +321,15 @@
       });
 
       // Jahresprognose: actual + sum of monthly forecasts for remaining months
-      var fcastClient = forecastByEmp[emp.id];
+      var empFcastMap = forecastByEmp[emp.id] || {};
       var projected = null;
-      if (fcastClient) {
+      if (Object.keys(empFcastMap).length > 0) {
         var projSum = 0;
         for (var pm = ym.month + 1; pm <= 12; pm++) {
-          projSum += fcastClient + netAvail[pm] * 0.15;
+          var pmClient = empFcastMap[pm] || 0;
+          if (pmClient > 0) projSum += pmClient + netAvail[pm] * 0.15;
         }
-        projected = total + Math.round(projSum * 4) / 4;
+        if (projSum > 0) projected = total + Math.round(projSum * 4) / 4;
       }
 
       html += '<tr>' +
@@ -328,7 +349,7 @@
     var hasForecast = Object.keys(forecastByEmp).length > 0;
     if (hasForecast) {
       html += '<div style="margin-top:10px;font-size:11px;color:var(--text-muted);padding:0 4px">' +
-        '<span style="opacity:.5;font-style:italic">~ Prognose</span> · Ø letzte 3 Monate (Kundenstunden) + 15% interne Zeit · gedimmte Zellen = Schätzwerte</div>';
+        '<span style="opacity:.5;font-style:italic">~ Prognose</span> · Summe Kundenbudgets (AM+ADV) + 15% der verfügbaren Stunden · gedimmte Zellen = Schätzwerte</div>';
     }
 
     tableWrap.innerHTML = html;
