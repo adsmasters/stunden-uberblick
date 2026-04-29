@@ -29,8 +29,11 @@
 
   window.getSb = function () { return sb(); };
 
-  window.isConfigured = () =>
-    !!(localStorage.getItem('supabaseUrl') && localStorage.getItem('supabaseKey'));
+  window.isConfigured = () => {
+    const url = localStorage.getItem('supabaseUrl') || DEFAULT_URL;
+    const key = localStorage.getItem('supabaseKey') || DEFAULT_KEY;
+    return !!(url && key && url !== 'SUPABASE_URL_HERE');
+  };
 
   window.configure = (url, key) => {
     localStorage.setItem('supabaseUrl', url.trim());
