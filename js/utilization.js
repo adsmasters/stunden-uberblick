@@ -132,12 +132,10 @@
       window.db.employees.listActive(),
       window.db.utilHours.forYear(year),
       window.db.entries.forYear(year),
-      window.db.clients.list(),
     ]).then(function (results) {
       var employees   = results[0];
       var utilData    = results[1];
       var entriesData = results[2];
-      var clientsData = results[3];
 
       if (!employees.length) {
         hideLoading();
@@ -145,11 +143,14 @@
         return;
       }
 
-      // Group util_hours by employee_id → month (total incl. internal time)
-      var empEntries = {};
+      // Group util_hours by employee_id → month
+      var empEntries = {};   // total hours
+      var empIntern  = {};   // intern hours (AdsMasters/Intern project)
       utilData.forEach(function (u) {
         if (!empEntries[u.employee_id]) empEntries[u.employee_id] = {};
         empEntries[u.employee_id][u.month] = u.hours || 0;
+        if (!empIntern[u.employee_id]) empIntern[u.employee_id] = {};
+        empIntern[u.employee_id][u.month] = u.intern_hours || 0;
       });
 
       // ── Entries-based per-employee monthly totals (for forecast) ─────
@@ -177,28 +178,13 @@
         });
       }
 
-      // ── Internal hours: entries on clients whose name contains "intern" ─
-      var internalClientIds = {};
-      clientsData.forEach(function (c) {
-        if (c.name.toLowerCase().indexOf('intern') !== -1) {
-          internalClientIds[c.id] = true;
-        }
-      });
-
-      var internalHoursByEmp = {};
-      entriesData.forEach(function (e) {
-        if (!internalClientIds[e.client_id]) return;
-        if (!internalHoursByEmp[e.employee_id]) internalHoursByEmp[e.employee_id] = {};
-        internalHoursByEmp[e.employee_id][e.month] =
-          (internalHoursByEmp[e.employee_id][e.month] || 0) + (e.hours || 0);
-      });
-
+      // ── Internal % from util_hours.intern_hours (synced from Clockify) ──
       var internalPctByEmp = {};
       employees.forEach(function (emp) {
         internalPctByEmp[emp.id] = {};
         for (var mi = 1; mi <= 12; mi++) {
           var tot    = (empEntries[emp.id] || {})[mi] || 0;
-          var intern = (internalHoursByEmp[emp.id] || {})[mi] || 0;
+          var intern = (empIntern[emp.id]  || {})[mi] || 0;
           if (tot > 0 && intern > 0) {
             internalPctByEmp[emp.id][mi] = Math.round(intern / tot * 100);
           }

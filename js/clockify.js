@@ -112,6 +112,34 @@
       });
     },
 
+    // Fetch intern hours per user (project name contains 'intern', any client)
+    fetchMonthInternByUser: function (year, month) {
+      var wId   = getWorkspaceId();
+      var start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0)).toISOString();
+      var end   = new Date(Date.UTC(year, month,     0, 23, 59, 59, 999)).toISOString();
+
+      return cfetch(REPORTS + '/workspaces/' + wId + '/reports/summary', {
+        method: 'POST',
+        body: JSON.stringify({
+          dateRangeStart: start,
+          dateRangeEnd:   end,
+          summaryFilter:  { groups: ['CLIENT', 'PROJECT', 'USER'] },
+        }),
+      }).then(function (data) {
+        var map = {};
+        (data.groupOne || []).forEach(function (client) {
+          (client.children || []).forEach(function (project) {
+            if (norm(project.name).indexOf('intern') === -1) return;
+            (project.children || []).forEach(function (user) {
+              var uKey = norm(user.name);
+              map[uKey] = (map[uKey] || 0) + (user.duration || 0) / 3600;
+            });
+          });
+        });
+        return map;
+      });
+    },
+
     // All projects in workspace
     getProjects: function () {
       var wId = getWorkspaceId();

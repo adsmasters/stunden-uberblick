@@ -81,10 +81,11 @@
     utilHours: {
       forYear: (year) =>
         q(s => s.from('util_hours').select('*').eq('year', year)),
-      upsert: (employeeId, year, month, hours) =>
+      upsert: (employeeId, year, month, hours, internHours) =>
         q(s => s.from('util_hours').upsert(
           { employee_id: employeeId, year, month,
             hours: hours || 0,
+            intern_hours: internHours || 0,
             updated_at: new Date().toISOString() },
           { onConflict: 'employee_id,year,month' }
         ).select().single()),

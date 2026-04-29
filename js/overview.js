@@ -404,10 +404,11 @@
       for (let m = 1; m <= maxMonth; m++) {
         syncBtn.textContent = `Synchronisiere ${window.MONTHS_DE[m - 1]}… (${m}/${maxMonth})`;
 
-        // Fetch client-breakdown AND user-totals in parallel
-        const [cfMap, userMap] = await Promise.all([
+        // Fetch client-breakdown, user-totals AND intern hours in parallel
+        const [cfMap, userMap, internMap] = await Promise.all([
           window.clockify.fetchMonth(year, m),
           window.clockify.fetchMonthByUser(year, m),
+          window.clockify.fetchMonthInternByUser(year, m),
         ]);
 
         // Client entries (for overview/detail)
@@ -429,12 +430,14 @@
 
         // Total hours per employee (for utilization – includes internal time)
         Object.keys(userMap).forEach(userKey => {
-          const emp   = employeeMap[userKey];
-          const hours = userMap[userKey];
+          const emp         = employeeMap[userKey];
+          const hours       = userMap[userKey];
+          const internHours = internMap[userKey] || 0;
           if (!emp) return;
           saves.push(window.db.utilHours.upsert(
             emp.id, year, m,
-            Math.round(hours * 4) / 4
+            Math.round(hours       * 4) / 4,
+            Math.round(internHours * 4) / 4
           ));
         });
       }
