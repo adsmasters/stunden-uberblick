@@ -164,25 +164,26 @@
       var agg = window.aggregateEntries(monthEntries);
       var adj = adjByMonth[month] || null;
 
-      // Synced hours
-      var syncAmTotal = agg.amTotal;
-      var syncAdvH    = agg.advH;
+      // Tracked hours (unchanged by corrections)
+      var amTotal = agg.amTotal;
+      var advH    = agg.advH;
+      var total   = amTotal + advH;
 
-      // Correction amounts
+      // Correction amounts (applied to budget, not to hours)
       var adjAm  = adj ? (adj.am_hours  || 0) : 0;
       var adjAdv = adj ? (adj.adv_hours || 0) : 0;
-
-      // Combined totals (what to display and compare vs budget)
-      var amTotal = syncAmTotal + adjAm;
-      var advH    = syncAdvH    + adjAdv;
-      var total   = amTotal + advH;
 
       // No budget comparison for months outside contract/project period
       var beforeContract = isBeforeContract(year, month, client);
       var afterProject   = isAfterProject(year, month, client);
       var outOfPeriod    = beforeContract || afterProject;
-      var amDiff  = (!outOfPeriod && client.am_budget  != null) ? amTotal - client.am_budget  : null;
-      var advDiff = (!outOfPeriod && client.adv_budget != null) ? advH    - client.adv_budget : null;
+
+      // Effective budget = monthly budget ± correction
+      var effAmBudget  = (!outOfPeriod && client.am_budget  != null) ? client.am_budget  + adjAm  : null;
+      var effAdvBudget = (!outOfPeriod && client.adv_budget != null) ? client.adv_budget + adjAdv : null;
+
+      var amDiff  = effAmBudget  != null ? amTotal - effAmBudget  : null;
+      var advDiff = effAdvBudget != null ? advH    - effAdvBudget : null;
       var amOver  = amDiff  != null && amDiff  > 0.05;
       var advOver = advDiff != null && advDiff > 0.05;
       var amOk    = amDiff  != null && amDiff  <= 0.05;
@@ -219,16 +220,16 @@
         return b.role === 'account_manager' || b.role === 'freelancer';
       });
 
-      // AM cell – show combined total, annotation if correction exists
+      // AM cell – show budget adjustment badge if correction exists
       var adjAmBadge = (!isFuture && adjAm !== 0)
-        ? ' <span class="adj-badge" title="' + (adj && adj.note ? adj.note : 'Manuelle Korrektur') + '">'
-          + (adjAm > 0 ? '+' : '') + window.fmtHours(adjAm) + ' Korr.</span>'
+        ? ' <span class="adj-badge" title="' + (adj && adj.note ? adj.note : 'Budgetkorrektur') + '">'
+          + 'Budget ' + (adjAm > 0 ? '+' : '') + window.fmtHours(adjAm) + '</span>'
         : '';
 
       var amCellContent;
       if (isFuture) {
         amCellContent = '<span class="text-muted">–</span>';
-      } else if (hasAMData || adjAm !== 0) {
+      } else if (hasAMData) {
         amCellContent =
           '<button class="expand-btn" id="' + btnId + '" data-target="' + expandId + '">' +
             window.svgChevron() + ' ' + window.fmtHours(amTotal) +
@@ -242,8 +243,8 @@
 
       // ADV cell
       var adjAdvBadge = (!isFuture && adjAdv !== 0)
-        ? ' <span class="adj-badge" title="' + (adj && adj.note ? adj.note : 'Manuelle Korrektur') + '">'
-          + (adjAdv > 0 ? '+' : '') + window.fmtHours(adjAdv) + ' Korr.</span>'
+        ? ' <span class="adj-badge" title="' + (adj && adj.note ? adj.note : 'Budgetkorrektur') + '">'
+          + 'Budget ' + (adjAdv > 0 ? '+' : '') + window.fmtHours(adjAdv) + '</span>'
         : '';
 
       var advCellContent = isFuture
@@ -287,7 +288,7 @@
       tbody.appendChild(tr);
 
       // AM breakdown sub-row (shows synced hours only, correction shown as extra line)
-      var showExpand = (hasAMData || adjAm !== 0) && !isFuture;
+      var showExpand = hasAMData && !isFuture;
       if (showExpand) {
         var amItems = agg.breakdown.filter(function (b) {
           return b.role === 'account_manager' || b.role === 'freelancer';
@@ -351,19 +352,25 @@
   function renderSummary(entriesByMonth, adjByMonth, year, client) {
     var ym = window.currentYearMonth();
     var totAm = 0, totAdv = 0, months = 0;
+    var yearAmB  = client.am_budget  != null ? 0 : null;
+    var yearAdvB = client.adv_budget != null ? 0 : null;
     for (var m = 1; m <= 12; m++) {
       if (year > ym.year || (year === ym.year && m > ym.month)) continue;
       if (isBeforeContract(year, m, client)) continue;
       if (isAfterProject(year, m, client))  continue;
-      var agg    = window.aggregateEntries(entriesByMonth[m] || []);
-      var adj    = adjByMonth[m] || null;
-      totAm  += agg.amTotal + (adj ? adj.am_hours  || 0 : 0);
-      totAdv += agg.advH    + (adj ? adj.adv_hours || 0 : 0);
+      var agg = window.aggregateEntries(entriesByMonth[m] || []);
+      var adj = adjByMonth[m] || null;
+      var adjAmH  = adj ? (adj.am_hours  || 0) : 0;
+      var adjAdvH = adj ? (adj.adv_hours || 0) : 0;
+      // Tracked hours unchanged
+      totAm  += agg.amTotal;
+      totAdv += agg.advH;
+      // Budget accumulates per month with corrections
+      if (yearAmB  != null) yearAmB  += client.am_budget  + adjAmH;
+      if (yearAdvB != null) yearAdvB += client.adv_budget + adjAdvH;
       months++;
     }
     var total    = totAm + totAdv;
-    var yearAmB  = client.am_budget  != null ? client.am_budget  * months : null;
-    var yearAdvB = client.adv_budget != null ? client.adv_budget * months : null;
     var hasBudget= yearAmB != null || yearAdvB != null;
     var totalBdg = (yearAmB || 0) + (yearAdvB || 0);
     var diff     = hasBudget ? total - totalBdg : null;

@@ -78,10 +78,24 @@
         q(s => s.from('clients').delete().eq('id', id)),
     },
 
+    utilHours: {
+      forYear: (year) =>
+        q(s => s.from('util_hours').select('*').eq('year', year)),
+      upsert: (employeeId, year, month, hours) =>
+        q(s => s.from('util_hours').upsert(
+          { employee_id: employeeId, year, month,
+            hours: hours || 0,
+            updated_at: new Date().toISOString() },
+          { onConflict: 'employee_id,year,month' }
+        ).select().single()),
+    },
+
     adjustments: {
       forClientYear: (clientId, year) =>
         q(s => s.from('adjustments').select('*')
           .eq('client_id', clientId).eq('year', year)),
+      forYear: (year) =>
+        q(s => s.from('adjustments').select('*').eq('year', year)),
       upsert: (clientId, year, month, amHours, advHours, note) =>
         q(s => s.from('adjustments').upsert(
           { client_id: clientId, year, month,

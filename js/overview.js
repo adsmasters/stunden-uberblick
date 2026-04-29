@@ -13,6 +13,29 @@
   const emptyEl   = document.getElementById('emptyClients');
 
   // ── Contract start helpers ────────────────────────────────────────────
+  // Sum up effective budget for a client over all active months (incl. per-month corrections)
+  function effectiveBudget(client, adjs, year, maxMonth) {
+    let amB = client.am_budget  != null ? 0 : null;
+    let advB = client.adv_budget != null ? 0 : null;
+    for (let m = 1; m <= maxMonth; m++) {
+      const d = new Date(client.contract_start || '2000-01-01');
+      const csY = client.contract_start ? d.getUTCFullYear() : 0;
+      const csM = client.contract_start ? d.getUTCMonth() + 1 : 1;
+      if (csY > year || (csY === year && m < csM)) continue;
+      if (client.is_project && client.project_end) {
+        const pe  = new Date(client.project_end);
+        const peY = pe.getUTCFullYear(), peM = pe.getUTCMonth() + 1;
+        if (year > peY || (year === peY && m > peM)) continue;
+      }
+      const adj    = adjs[m] || null;
+      const adjAmH  = adj ? (adj.am_hours  || 0) : 0;
+      const adjAdvH = adj ? (adj.adv_hours || 0) : 0;
+      if (amB  != null) amB  += client.am_budget  + adjAmH;
+      if (advB != null) advB += client.adv_budget + adjAdvH;
+    }
+    return { amB, advB };
+  }
+
   function effectiveMonths(client, year, maxMonth) {
     // Determine start month for this year
     let startM = 1;
@@ -58,10 +81,10 @@
         va = aa.amTotal + aa.advH;
         vb = ba.amTotal + ba.advH;
       } else if (sortCol === 'diff') {
-        const aBdg = (ac.am_budget  != null ? ac.am_budget  * maxMonth : 0)
-                   + (ac.adv_budget != null ? ac.adv_budget * maxMonth : 0);
-        const bBdg = (bc.am_budget  != null ? bc.am_budget  * maxMonth : 0)
-                   + (bc.adv_budget != null ? bc.adv_budget * maxMonth : 0);
+        const aEff = effectiveBudget(ac, a.adjs, parseInt(yearSel.value), maxMonth);
+        const bEff = effectiveBudget(bc, b.adjs, parseInt(yearSel.value), maxMonth);
+        const aBdg = (aEff.amB || 0) + (aEff.advB || 0);
+        const bBdg = (bEff.amB || 0) + (bEff.advB || 0);
         va = (aa.amTotal + aa.advH) - aBdg;
         vb = (ba.amTotal + ba.advH) - bBdg;
       }
@@ -142,7 +165,15 @@
     Promise.all([
       window.db.clients.list(),
       window.db.entries.forYear(year),
-    ]).then(([clients, entries]) => {
+      window.db.adjustments.forYear(year),
+    ]).then(([clients, entries, allAdjs]) => {
+
+      // Index adjustments by client_id → month
+      const adjByClient = {};
+      allAdjs.forEach(a => {
+        if (!adjByClient[a.client_id]) adjByClient[a.client_id] = {};
+        adjByClient[a.client_id][a.month] = a;
+      });
 
       if (!clients.length) {
         hideLoading();
@@ -164,6 +195,7 @@
         client:  c,
         entries: entriesByClient[c.id] || [],
         agg:     window.aggregateEntries(entriesByClient[c.id] || []),
+        adjs:    adjByClient[c.id] || {},
       }));
 
       // Cache for re-sorting without reload
@@ -199,13 +231,11 @@
     const sorted = sortRows(rows, maxMonth);
 
     sorted.forEach((row, i) => {
-      const { client: c, entries: clientEntries, agg } = row;
+      const { client: c, entries: clientEntries, agg, adjs } = row;
       const { amH, advH, flH, amTotal, breakdown } = agg;
 
-      // Budget = monthly budget × effective months (respects contract start)
-      const effM = effectiveMonths(c, year, maxMonth);
-      const annualAmBdg  = c.am_budget  != null && effM > 0 ? c.am_budget  * effM : null;
-      const annualAdvBdg = c.adv_budget != null && effM > 0 ? c.adv_budget * effM : null;
+      // Budget = monthly budget × effective months + per-month corrections
+      const { amB: annualAmBdg, advB: annualAdvBdg } = effectiveBudget(c, adjs, year, maxMonth);
 
       const amDiff  = annualAmBdg  != null ? amTotal - annualAmBdg  : null;
       const advDiff = annualAdvBdg != null ? advH    - annualAdvBdg : null;
@@ -304,12 +334,10 @@
   function renderSummary(rows, year, maxMonth) {
     let totAm = 0, totAdv = 0, totalBudget = 0, clientsOver = 0;
     let hasBudget = false;
-    rows.forEach(({ client: c, agg }) => {
+    rows.forEach(({ client: c, agg, adjs }) => {
       totAm  += agg.amTotal;
       totAdv += agg.advH;
-      const effM2 = effectiveMonths(c, year, maxMonth);
-      const periodAmBdg  = c.am_budget  != null && effM2 > 0 ? c.am_budget  * effM2 : null;
-      const periodAdvBdg = c.adv_budget != null && effM2 > 0 ? c.adv_budget * effM2 : null;
+      const { amB: periodAmBdg, advB: periodAdvBdg } = effectiveBudget(c, adjs, year, maxMonth);
       if (periodAmBdg != null || periodAdvBdg != null) {
         hasBudget = true;
         totalBudget += (periodAmBdg || 0) + (periodAdvBdg || 0);
@@ -375,8 +403,14 @@
       // Fetch all months sequentially with progress
       for (let m = 1; m <= maxMonth; m++) {
         syncBtn.textContent = `Synchronisiere ${window.MONTHS_DE[m - 1]}… (${m}/${maxMonth})`;
-        const cfMap = await window.clockify.fetchMonth(year, m);
 
+        // Fetch client-breakdown AND user-totals in parallel
+        const [cfMap, userMap] = await Promise.all([
+          window.clockify.fetchMonth(year, m),
+          window.clockify.fetchMonthByUser(year, m),
+        ]);
+
+        // Client entries (for overview/detail)
         Object.keys(cfMap).forEach(clientKey => {
           const client = clientMap[clientKey];
           if (!client) { unmatched.clients.add(clientKey); return; }
@@ -387,10 +421,21 @@
             if (!emp) { unmatched.users.add(userKey); return; }
             saves.push(window.db.entries.upsert(
               client.id, emp.id, year, m,
-              Math.round(hours * 4) / 4  // round to nearest 0.25h
+              Math.round(hours * 4) / 4
             ));
             matched++;
           });
+        });
+
+        // Total hours per employee (for utilization – includes internal time)
+        Object.keys(userMap).forEach(userKey => {
+          const emp   = employeeMap[userKey];
+          const hours = userMap[userKey];
+          if (!emp) return;
+          saves.push(window.db.utilHours.upsert(
+            emp.id, year, m,
+            Math.round(hours * 4) / 4
+          ));
         });
       }
 
