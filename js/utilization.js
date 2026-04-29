@@ -28,6 +28,18 @@
     localStorage.setItem('internalPct', internalPct.value);
   });
 
+  // Dashlane intercepts clicks on the checkbox itself — listen on label instead
+  var deductHolidaysLabel = document.querySelector('label[for="deductHolidays"]');
+  if (deductHolidaysLabel) {
+    deductHolidaysLabel.addEventListener('click', function () {
+      // Let the browser toggle checked state first, then reload
+      setTimeout(function () {
+        localStorage.setItem('deductHolidays', deductHolidays.checked ? '1' : '0');
+        loadData();
+      }, 0);
+    });
+  }
+  // Fallback: also keep click on checkbox for browsers without extensions
   deductHolidays.addEventListener('click', function () {
     localStorage.setItem('deductHolidays', deductHolidays.checked ? '1' : '0');
     loadData();
