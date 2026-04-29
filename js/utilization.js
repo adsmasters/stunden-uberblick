@@ -108,8 +108,19 @@
   // ── Load data ─────────────────────────────────────────────────────────
   function loadData() {
     showLoading();
-    var year = parseInt(yearSel.value);
-    var pct  = parseFloat(internalPct.value) || 0;
+    var year       = parseInt(yearSel.value);
+    var pct        = parseFloat(internalPct.value) || 0;
+    var subtract   = deductHolidays.checked;
+    var holidayDays = subtract ? holidayWorkdaysByMonth(year) : {};
+
+    // Pre-compute available hours so renderTable can use them from closure
+    var available = {}, netAvail = {}, workDays = {};
+    for (var m = 1; m <= 12; m++) {
+      workDays[m]  = getWorkDays(year, m);
+      var effDays  = workDays[m] - (holidayDays[m] || 0);
+      available[m] = effDays * 8;
+      netAvail[m]  = available[m] * (1 - pct / 100);
+    }
 
     Promise.all([
       window.db.employees.listActive(),
@@ -130,17 +141,6 @@
         if (!empEntries[u.employee_id]) empEntries[u.employee_id] = {};
         empEntries[u.employee_id][u.month] = u.hours || 0;
       });
-
-      // Available hours per month
-      var subtract     = deductHolidays.checked;
-      var holidayDays  = subtract ? holidayWorkdaysByMonth(year) : {};
-      var available = {}, netAvail = {}, workDays = {};
-      for (var m = 1; m <= 12; m++) {
-        workDays[m]  = getWorkDays(year, m);
-        var effDays  = workDays[m] - (holidayDays[m] || 0);
-        available[m] = effDays * 8;
-        netAvail[m]  = available[m] * (1 - pct / 100);
-      }
 
       renderTable(employees, empEntries, available, netAvail, workDays, year, pct, subtract, holidayDays);
       renderHolidayInfo(year);
