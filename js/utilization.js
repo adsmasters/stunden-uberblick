@@ -120,6 +120,7 @@
   // ── Load data ─────────────────────────────────────────────────────────
   function loadData() {
     showLoading();
+    var ym         = window.currentYearMonth();
     var year       = parseInt(yearSel.value);
     var pct        = parseFloat(internalPct.value) || 0;
     var subtract   = deductHolidays.checked;
@@ -137,9 +138,11 @@
     Promise.all([
       window.db.employees.listActive(),
       window.db.utilHours.forYear(year),
+      window.db.entries.forYear(year),
     ]).then(function (results) {
-      var employees = results[0];
-      var utilData  = results[1];
+      var employees   = results[0];
+      var utilData    = results[1];
+      var entriesData = results[2];
 
       if (!employees.length) {
         hideLoading();
@@ -154,11 +157,19 @@
         empEntries[u.employee_id][u.month] = u.hours || 0;
       });
 
-      // ── Forecast: rolling 3-month average per employee ────────────────
+      // ── Entries-based per-employee monthly totals (for forecast) ─────
+      var entriesPerEmp = {};
+      entriesData.forEach(function (e) {
+        if (!entriesPerEmp[e.employee_id]) entriesPerEmp[e.employee_id] = {};
+        entriesPerEmp[e.employee_id][e.month] =
+          (entriesPerEmp[e.employee_id][e.month] || 0) + (e.hours || 0);
+      });
+
+      // ── Forecast: rolling 3-month average from client entries ─────────
       var forecastByEmp = {};
       if (year === ym.year && ym.month < 12) {
         employees.forEach(function (emp) {
-          var monthMap = empEntries[emp.id] || {};
+          var monthMap = entriesPerEmp[emp.id] || {};
           var recent = [];
           for (var fm = ym.month; fm >= 1 && recent.length < 3; fm--) {
             if (monthMap[fm] > 0) recent.push(monthMap[fm]);
@@ -295,7 +306,7 @@
     var hasForecast = Object.keys(forecastByEmp).length > 0;
     if (hasForecast) {
       html += '<div style="margin-top:10px;font-size:11px;color:var(--text-muted);padding:0 4px">' +
-        '<span style="opacity:.5;font-style:italic">~ Prognose</span> · Ø der letzten 3 Monate · gedimmte Zellen = Schätzwerte</div>';
+        '<span style="opacity:.5;font-style:italic">~ Prognose</span> · Ø der letzten 3 Monate (Kundenstunden) · gedimmte Zellen = Schätzwerte</div>';
     }
 
     tableWrap.innerHTML = html;
