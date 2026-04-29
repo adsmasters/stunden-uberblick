@@ -89,6 +89,29 @@
       });
     },
 
+    // Fetch total hours per user for a month (all projects, regardless of client)
+    fetchMonthByUser: function (year, month) {
+      var wId   = getWorkspaceId();
+      var start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0)).toISOString();
+      var end   = new Date(Date.UTC(year, month,     0, 23, 59, 59, 999)).toISOString();
+
+      return cfetch(REPORTS + '/workspaces/' + wId + '/reports/summary', {
+        method: 'POST',
+        body: JSON.stringify({
+          dateRangeStart: start,
+          dateRangeEnd:   end,
+          summaryFilter:  { groups: ['USER'] },
+        }),
+      }).then(function (data) {
+        // { normUserName → totalHours (all projects/clients combined) }
+        var map = {};
+        (data.groupOne || []).forEach(function (user) {
+          map[norm(user.name)] = (user.duration || 0) / 3600;
+        });
+        return map;
+      });
+    },
+
     // All projects in workspace
     getProjects: function () {
       var wId = getWorkspaceId();
