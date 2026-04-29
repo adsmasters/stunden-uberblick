@@ -132,10 +132,12 @@
       window.db.employees.listActive(),
       window.db.utilHours.forYear(year),
       window.db.entries.forYear(year),
+      window.db.clients.list(),
     ]).then(function (results) {
       var employees   = results[0];
       var utilData    = results[1];
       var entriesData = results[2];
+      var clientsData = results[3];
 
       if (!employees.length) {
         hideLoading();
@@ -175,15 +177,30 @@
         });
       }
 
-      // ── Internal % per employee per month (util_hours vs client entries) ─
+      // ── Internal hours: entries on clients whose name contains "intern" ─
+      var internalClientIds = {};
+      clientsData.forEach(function (c) {
+        if (c.name.toLowerCase().indexOf('intern') !== -1) {
+          internalClientIds[c.id] = true;
+        }
+      });
+
+      var internalHoursByEmp = {};
+      entriesData.forEach(function (e) {
+        if (!internalClientIds[e.client_id]) return;
+        if (!internalHoursByEmp[e.employee_id]) internalHoursByEmp[e.employee_id] = {};
+        internalHoursByEmp[e.employee_id][e.month] =
+          (internalHoursByEmp[e.employee_id][e.month] || 0) + (e.hours || 0);
+      });
+
       var internalPctByEmp = {};
       employees.forEach(function (emp) {
         internalPctByEmp[emp.id] = {};
         for (var mi = 1; mi <= 12; mi++) {
-          var tot = (empEntries[emp.id] || {})[mi] || 0;
-          var cli = (entriesPerEmp[emp.id] || {})[mi] || 0;
-          if (tot > 0) {
-            internalPctByEmp[emp.id][mi] = Math.round(Math.max(0, tot - cli) / tot * 100);
+          var tot    = (empEntries[emp.id] || {})[mi] || 0;
+          var intern = (internalHoursByEmp[emp.id] || {})[mi] || 0;
+          if (tot > 0 && intern > 0) {
+            internalPctByEmp[emp.id][mi] = Math.round(intern / tot * 100);
           }
         }
       });
