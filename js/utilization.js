@@ -1,9 +1,10 @@
 (function () {
   'use strict';
 
-  var yearSel     = document.getElementById('yearSelect');
-  var internalPct = document.getElementById('internalPct');
-  var loadBtn     = document.getElementById('loadBtn');
+  var yearSel        = document.getElementById('yearSelect');
+  var internalPct    = document.getElementById('internalPct');
+  var deductHolidays = document.getElementById('deductHolidays');
+  var loadBtn        = document.getElementById('loadBtn');
   var tableWrap   = document.getElementById('tableWrap');
   var loadingEl   = document.getElementById('loading');
   var errorEl     = document.getElementById('error');
@@ -20,10 +21,16 @@
       yearSel.appendChild(o);
     }
     internalPct.value = localStorage.getItem('internalPct') || '0';
+    deductHolidays.checked = localStorage.getItem('deductHolidays') === '1';
   })();
 
   internalPct.addEventListener('change', function () {
     localStorage.setItem('internalPct', internalPct.value);
+  });
+
+  deductHolidays.addEventListener('change', function () {
+    localStorage.setItem('deductHolidays', deductHolidays.checked ? '1' : '0');
+    loadData();
   });
 
   // ── Working days calculation ──────────────────────────────────────────
@@ -70,6 +77,19 @@
     return counts;
   }
 
+  // Count only holidays that fall on Mon–Fri (actual work-day deductions)
+  function holidayWorkdaysByMonth(year) {
+    var counts = {};
+    getGermanHolidays(year).forEach(function (h) {
+      var dow = h.date.getDay();
+      if (dow >= 1 && dow <= 5) {
+        var m = h.date.getMonth() + 1;
+        counts[m] = (counts[m] || 0) + 1;
+      }
+    });
+    return counts;
+  }
+
   // ── State helpers ─────────────────────────────────────────────────────
   function showLoading() {
     loadingEl.innerHTML = '<div class="loading-bar"><div class="spinner"></div>Lade Daten…</div>';
@@ -93,10 +113,10 @@
 
     Promise.all([
       window.db.employees.listActive(),
-      window.db.entries.forYear(year),
+      window.db.utilHours.forYear(year),
     ]).then(function (results) {
       var employees = results[0];
-      var entries   = results[1];
+      var utilData  = results[1];
 
       if (!employees.length) {
         hideLoading();
@@ -104,22 +124,25 @@
         return;
       }
 
-      // Group entries by employee_id → month
+      // Group util_hours by employee_id → month (total incl. internal time)
       var empEntries = {};
-      entries.forEach(function (e) {
-        if (!empEntries[e.employee_id]) empEntries[e.employee_id] = {};
-        empEntries[e.employee_id][e.month] = (empEntries[e.employee_id][e.month] || 0) + (e.hours || 0);
+      utilData.forEach(function (u) {
+        if (!empEntries[u.employee_id]) empEntries[u.employee_id] = {};
+        empEntries[u.employee_id][u.month] = u.hours || 0;
       });
 
       // Available hours per month
+      var subtract     = deductHolidays.checked;
+      var holidayDays  = subtract ? holidayWorkdaysByMonth(year) : {};
       var available = {}, netAvail = {}, workDays = {};
       for (var m = 1; m <= 12; m++) {
         workDays[m]  = getWorkDays(year, m);
-        available[m] = workDays[m] * 8;
+        var effDays  = workDays[m] - (holidayDays[m] || 0);
+        available[m] = effDays * 8;
         netAvail[m]  = available[m] * (1 - pct / 100);
       }
 
-      renderTable(employees, empEntries, available, netAvail, workDays, year, pct);
+      renderTable(employees, empEntries, available, netAvail, workDays, year, pct, subtract, holidayDays);
       renderHolidayInfo(year);
       hideLoading();
       tableWrap.classList.remove('hidden');
@@ -130,7 +153,7 @@
   }
 
   // ── Render table ──────────────────────────────────────────────────────
-  function renderTable(employees, empEntries, available, netAvail, workDays, year, pct) {
+  function renderTable(employees, empEntries, available, netAvail, workDays, year, pct, subtract, holidayDays) {
     var ym = window.currentYearMonth();
 
     // Build info bar
@@ -143,7 +166,8 @@
           '<div style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums">' +
             (isFuture ? '<span class="text-muted">—</span>' : window.fmtHours(netAvail[m])) +
           '</div>' +
-          '<div style="font-size:10px;color:var(--text-muted)">' + workDays[m] + ' AT' +
+          '<div style="font-size:10px;color:var(--text-muted)">' +
+            (subtract && holidayDays[m] ? (workDays[m] - holidayDays[m]) + ' AT <span style="color:var(--text-muted)">(-' + holidayDays[m] + ' FT)</span>' : workDays[m] + ' AT') +
             (pct > 0 ? ' · <span style="color:var(--warning)">' + pct + '% intern</span>' : '') +
           '</div>' +
         '</div>';
@@ -161,8 +185,13 @@
     window.MONTHS_DE.forEach(function (mn, i) {
       var m = i + 1;
       var isFuture = year > ym.year || (year === ym.year && m > ym.month);
+      var hdNote = '';
+      if (!isFuture) {
+        hdNote = window.fmtHours(netAvail[m]);
+        if (subtract && holidayDays[m]) hdNote += ' <span style="color:var(--text-muted)">-' + holidayDays[m] + 'FT</span>';
+      }
       html += '<th class="center util-bar-cell" style="min-width:90px">' + mn.substring(0,3) +
-        (isFuture ? '' : '<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:1px">' + window.fmtHours(netAvail[m]) + '</div>') +
+        (isFuture ? '' : '<div style="font-size:9px;font-weight:400;color:var(--text-muted);margin-top:1px">' + hdNote + '</div>') +
         '</th>';
     });
     html += '<th class="right" style="min-width:90px">Gesamt</th></tr></thead><tbody>';
@@ -215,14 +244,23 @@
 
   // ── Holiday info ──────────────────────────────────────────────────────
   function renderHolidayInfo(year) {
-    var holidays = getGermanHolidays(year);
+    var holidays  = getGermanHolidays(year);
+    var deducting = deductHolidays.checked;
+    var label = deducting
+      ? 'Bundesweite Feiertage ' + year + ' – werden als Abzug berechnet (nur Mo–Fr)'
+      : 'Bundesweite Feiertage ' + year + ' (nur Info – nicht als Abzug berechnet)';
     var html = '<div class="card" style="padding:16px 20px">' +
-      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:10px">Bundesweite Feiertage ' + year + ' (nur Info – nicht als Abzug berechnet)</div>' +
+      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:10px">' + label + '</div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:6px 20px">';
     var opts = { day: '2-digit', month: '2-digit' };
     holidays.forEach(function (h) {
-      html += '<span style="font-size:12.5px;color:var(--text-secondary)">' +
-        '<strong style="font-variant-numeric:tabular-nums">' + h.date.toLocaleDateString('de-DE', opts) + '</strong> ' + h.name + '</span>';
+      var dow = h.date.getDay();
+      var isWeekend = dow === 0 || dow === 6;
+      var dimmed = deducting && isWeekend ? ';opacity:.45' : '';
+      html += '<span style="font-size:12.5px;color:var(--text-secondary)' + dimmed + '">' +
+        '<strong style="font-variant-numeric:tabular-nums">' + h.date.toLocaleDateString('de-DE', opts) + '</strong> ' + h.name +
+        (isWeekend ? ' <span style="font-size:10px;color:var(--text-muted)">(WE)</span>' : '') +
+        '</span>';
     });
     html += '</div></div>';
     holidayInfo.innerHTML = html;
