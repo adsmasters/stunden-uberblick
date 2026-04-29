@@ -191,6 +191,14 @@ td.cell-ok {
   background: var(--success-bg) !important;
   color: #065f46;
 }
+td.diff-over {
+  background: var(--danger-bg) !important;
+  color: #991b1b;
+}
+td.diff-under {
+  background: var(--success-bg) !important;
+  color: #065f46;
+}
 td.cell-warn {
   background: var(--warning-bg) !important;
   color: #92400e;
