@@ -111,6 +111,19 @@
           .eq('client_id', clientId).eq('year', year).eq('month', month)),
     },
 
+    absences: {
+      forYear: (year) =>
+        q(s => s.from('employee_absences').select('*').eq('year', year)),
+      upsert: (empId, year, month, vacDays, sickDays) =>
+        q(s => s.from('employee_absences').upsert(
+          { employee_id: empId, year, month,
+            vacation_days: vacDays  || 0,
+            sick_days:     sickDays || 0,
+            updated_at: new Date().toISOString() },
+          { onConflict: 'employee_id,year,month' }
+        ).select().single()),
+    },
+
     entries: {
       // All entries for a month across all clients (includes employee data)
       forMonth: (year, month) =>
