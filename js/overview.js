@@ -12,9 +12,37 @@
   const summaryEl = document.getElementById('summary');
   const emptyEl   = document.getElementById('emptyClients');
 
+  // ── Working-day helpers ───────────────────────────────────────────────
+  // Count Mon–Fri days in a given year/month
+  function totalWorkDays(year, month) {
+    const days = new Date(year, month, 0).getDate(); // days in month
+    let count = 0;
+    for (let d = 1; d <= days; d++) {
+      const dow = new Date(year, month - 1, d).getDay();
+      if (dow >= 1 && dow <= 5) count++;
+    }
+    return count;
+  }
+
+  // Count Mon–Fri days from 1st up to and including `upToDay`
+  function elapsedWorkDays(year, month, upToDay) {
+    let count = 0;
+    for (let d = 1; d <= upToDay; d++) {
+      const dow = new Date(year, month - 1, d).getDay();
+      if (dow >= 1 && dow <= 5) count++;
+    }
+    return count;
+  }
+
   // ── Contract start helpers ────────────────────────────────────────────
   // Sum up effective budget for a client over all active months (incl. per-month corrections)
+  // For the current month the budget is pro-rated by elapsed working days / total working days
   function effectiveBudget(client, adjs, year, maxMonth) {
+    const today = new Date();
+    const todayY = today.getFullYear();
+    const todayM = today.getMonth() + 1;
+    const todayD = today.getDate();
+
     let amB = client.am_budget  != null ? 0 : null;
     let advB = client.adv_budget != null ? 0 : null;
     for (let m = 1; m <= maxMonth; m++) {
@@ -30,8 +58,17 @@
       const adj    = adjs[m] || null;
       const adjAmH  = adj ? (adj.am_hours  || 0) : 0;
       const adjAdvH = adj ? (adj.adv_hours || 0) : 0;
-      if (amB  != null) amB  += client.am_budget  + adjAmH;
-      if (advB != null) advB += client.adv_budget + adjAdvH;
+
+      // Pro-rate current month by elapsed working days
+      let ratio = 1;
+      if (year === todayY && m === todayM) {
+        const total   = totalWorkDays(year, m);
+        const elapsed = elapsedWorkDays(year, m, todayD);
+        ratio = total > 0 ? elapsed / total : 1;
+      }
+
+      if (amB  != null) amB  += (client.am_budget  + adjAmH)  * ratio;
+      if (advB != null) advB += (client.adv_budget + adjAdvH) * ratio;
     }
     return { amB, advB };
   }
