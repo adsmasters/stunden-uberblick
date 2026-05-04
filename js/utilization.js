@@ -217,7 +217,7 @@
         }
       });
 
-      renderTable(employees, empEntries, forecastByEmp, internalPctByEmp,
+      renderTable(employees, empEntries, empIntern, forecastByEmp, internalPctByEmp,
                   available, netAvail, workDays, year, subtract, holidayDays,
                   clientBreakdown, clientMap);
       renderHolidayInfo(year);
@@ -283,32 +283,41 @@
     '#f97316','#14b8a6','#3b82f6','#a78bfa',
   ];
 
-  function showMonthDetail(emp, month, year, clientBreakdown, clientMap, available) {
+  var INTERN_COLOR = '#94a3b8'; // fixed slate color for intern segment
+
+  function showMonthDetail(emp, month, year, clientBreakdown, clientMap, empIntern, available) {
     var existing = document.getElementById('util-month-modal');
     if (existing) existing.remove();
 
     var monthName = window.MONTHS_DE[month - 1];
     var avail     = available[month] || 0;
 
-    // Build breakdown array from stored { clientId: hours }
+    // Build client segments from entries { clientId: hours }
     var raw = (clientBreakdown[emp.id] || {})[month] || {};
     var segments = Object.keys(raw).map(function (cid) {
       return {
         name:  (clientMap[cid] || {}).name || 'Unbekannt',
         hours: raw[cid],
+        isIntern: false,
       };
     }).sort(function (a, b) { return b.hours - a.hours; });
 
-    var totalHrs = segments.reduce(function (s, x) { return s + x.hours; }, 0);
-
-    if (!segments.length) {
-      // No client data — show simple notice
-      segments = [];
-    }
-
+    // Assign chart colors to client segments
     segments.forEach(function (s, i) {
       s.color = CHART_COLORS[i % CHART_COLORS.length];
-      s.pct   = totalHrs > 0 ? Math.round(s.hours / totalHrs * 100) : 0;
+    });
+
+    // Add intern segment at the end if present
+    var internHrs = (empIntern[emp.id] || {})[month] || 0;
+    if (internHrs > 0) {
+      segments.push({ name: 'Intern', hours: internHrs, color: INTERN_COLOR, isIntern: true });
+    }
+
+    var totalHrs = segments.reduce(function (s, x) { return s + x.hours; }, 0);
+
+    // Calculate percentages relative to total
+    segments.forEach(function (s) {
+      s.pct = totalHrs > 0 ? Math.round(s.hours / totalHrs * 100) : 0;
     });
 
     var utilPct = avail > 0 ? Math.round(totalHrs / avail * 100) : 0;
@@ -317,20 +326,42 @@
       160
     );
 
-    var listHtml = segments.length
-      ? segments.map(function (s) {
-          return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-light)">' +
-            '<div style="width:10px;height:10px;border-radius:50%;background:' + s.color + ';flex-shrink:0"></div>' +
-            '<div style="flex:1;font-size:13px;font-weight:500">' + s.name + '</div>' +
-            '<div style="font-size:13px;font-variant-numeric:tabular-nums;font-weight:600">' + window.fmtHours(s.hours) + '</div>' +
-            '<div style="font-size:12px;color:var(--text-muted);width:36px;text-align:right">' + s.pct + '%</div>' +
-          '</div>';
-        }).join('') +
+    var clientSegments = segments.filter(function (s) { return !s.isIntern; });
+    var clientTotal    = clientSegments.reduce(function (s, x) { return s + x.hours; }, 0);
+
+    var rowHtml = function (s) {
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-light)">' +
+        '<div style="width:10px;height:10px;border-radius:50%;background:' + s.color + ';flex-shrink:0"></div>' +
+        '<div style="flex:1;font-size:13px;font-weight:500' + (s.isIntern ? ';color:var(--text-secondary)' : '') + '">' + s.name + '</div>' +
+        '<div style="font-size:13px;font-variant-numeric:tabular-nums;font-weight:600">' + window.fmtHours(s.hours) + '</div>' +
+        '<div style="font-size:12px;color:var(--text-muted);width:36px;text-align:right">' + s.pct + '%</div>' +
+      '</div>';
+    };
+
+    var listHtml;
+    if (segments.length) {
+      var clientRows = clientSegments.map(rowHtml).join('');
+      var internRow  = internHrs > 0
+        ? '<div style="margin-top:6px;padding-top:2px">' +
+            rowHtml(segments[segments.length - 1]) +
+          '</div>'
+        : '';
+      listHtml =
+        (clientRows || '<div style="padding:8px 0;font-size:12.5px;color:var(--text-muted)">Keine Kundenstunden erfasst</div>') +
+        (clientSegments.length
+          ? '<div style="display:flex;justify-content:space-between;padding-top:8px;padding-bottom:6px;font-size:12.5px;border-bottom:1px solid var(--border)">' +
+              '<span style="color:var(--text-muted)">Kundenstunden</span>' +
+              '<span style="font-weight:600;font-variant-numeric:tabular-nums">' + window.fmtHours(clientTotal) + '</span>' +
+            '</div>'
+          : '') +
+        internRow +
         '<div style="display:flex;justify-content:space-between;padding-top:9px;font-size:13px">' +
-          '<span style="font-weight:600;color:var(--text-muted)">Kundenstunden</span>' +
+          '<span style="font-weight:700">Gesamt</span>' +
           '<span style="font-weight:700;font-variant-numeric:tabular-nums">' + window.fmtHours(totalHrs) + '</span>' +
-        '</div>'
-      : '<div style="text-align:center;padding:20px 0;color:var(--text-muted);font-size:13px">Keine Kundenstunden für diesen Monat</div>';
+        '</div>';
+    } else {
+      listHtml = '<div style="text-align:center;padding:20px 0;color:var(--text-muted);font-size:13px">Keine Stunden für diesen Monat</div>';
+    }
 
     var modal = document.createElement('div');
     modal.id = 'util-month-modal';
@@ -393,7 +424,7 @@
   }
 
   // ── Render table ──────────────────────────────────────────────────────
-  function renderTable(employees, empEntries, forecastByEmp, internalPctByEmp,
+  function renderTable(employees, empEntries, empIntern, forecastByEmp, internalPctByEmp,
                        available, netAvail, workDays, year, subtract, holidayDays,
                        clientBreakdown, clientMap) {
     var ym = window.currentYearMonth();
@@ -541,7 +572,7 @@
       var yr    = parseInt(yearSel.value);
       var emp   = employees.find(function (em) { return em.id === empId; });
       if (!emp) return;
-      showMonthDetail(emp, month, yr, clientBreakdown, clientMap, available);
+      showMonthDetail(emp, month, yr, clientBreakdown, clientMap, empIntern, available);
     });
   }
 
