@@ -624,3 +624,19 @@ thead th.sortable:hover .sort-ind { opacity: 1; }
 .text-muted { color: var(--text-muted); }
 .font-mono { font-variant-numeric: tabular-nums; }
 hr.divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+/* ── Utilization clickable month cell ── */
+td.util-month-clickable {
+  cursor: pointer;
+  transition: background .15s;
+}
+td.util-month-clickable:hover {
+  background: var(--primary-light) !important;
+}
+td.util-month-clickable:hover .util-bar-fill.low    { background: var(--primary); }
+td.util-month-clickable:hover .util-bar-fill.medium { background: var(--primary); }
+td.util-month-clickable:hover .util-bar-fill.high   { background: var(--primary); }
+
+/* ── Diff column colors (overview) ── */
+td.diff-over  { background: var(--danger-bg)  !important; color: #991b1b; }
+td.diff-under { background: var(--success-bg) !important; color: #065f46; }
