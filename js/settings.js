@@ -108,6 +108,47 @@
       });
   });
 
+  // ── LexOffice section ────────────────────────────────────────────────
+  var lexofficeKeyInput   = document.getElementById('lexofficeKey');
+  var lexofficeSaveBtn    = document.getElementById('lexofficeSaveBtn');
+  var lexofficeSaveStatus = document.getElementById('lexofficeSaveStatus');
+  var lexofficeStatusEl   = document.getElementById('lexofficeStatus');
+
+  lexofficeKeyInput.value = localStorage.getItem('lexofficeKey') || '';
+
+  if (window.lexoffice.isConfigured()) {
+    lexofficeStatusEl.innerHTML = '<span class="badge badge-ok">✓ Verbunden</span>';
+  }
+
+  function setLexofficeStatus(msg, type) {
+    lexofficeSaveStatus.textContent = msg;
+    lexofficeSaveStatus.style.color =
+      type === 'success' ? 'var(--success)' :
+      type === 'error'   ? 'var(--danger)'  : 'var(--text-secondary)';
+  }
+
+  lexofficeSaveBtn.addEventListener('click', function () {
+    var key = lexofficeKeyInput.value.trim();
+    if (!key) { setLexofficeStatus('Bitte API Key eingeben.', 'error'); return; }
+    localStorage.setItem('lexofficeKey', key);
+    lexofficeSaveBtn.disabled = true;
+    lexofficeSaveBtn.textContent = 'Teste Verbindung…';
+    setLexofficeStatus('', '');
+    window.lexoffice.testConnection()
+      .then(function () {
+        setLexofficeStatus('Verbindung erfolgreich ✓', 'success');
+        lexofficeStatusEl.innerHTML = '<span class="badge badge-ok">✓ Verbunden</span>';
+      })
+      .catch(function (e) {
+        setLexofficeStatus('Fehler: ' + e.message, 'error');
+        lexofficeStatusEl.innerHTML = '<span class="badge badge-over">✗ Fehler</span>';
+      })
+      .finally(function () {
+        lexofficeSaveBtn.disabled = false;
+        lexofficeSaveBtn.textContent = 'Verbindung speichern & testen';
+      });
+  });
+
   copyBtn.addEventListener('click', function () {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(sqlBlock.textContent.trim())

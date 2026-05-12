@@ -48,9 +48,9 @@
         q(s => s.from('employees').select('*').order('name')),
       listActive: () =>
         q(s => s.from('employees').select('*').eq('active', true).order('name')),
-      create: (name, role, email) =>
+      create: (name, role, email, monthlyCost) =>
         q(s => s.from('employees')
-          .insert({ name, role, email: email || null, active: true })
+          .insert({ name, role, email: email || null, active: true, monthly_cost: monthlyCost || 0 })
           .select().single()),
       update: (id, fields) =>
         q(s => s.from('employees').update(fields).eq('id', id).select().single()),
@@ -65,12 +65,13 @@
           .order('name')),
       get: (id) =>
         q(s => s.from('clients').select('*').eq('id', id).single()),
-      create: (name, amBudget, advBudget, amEmpId, advEmpId, contractStart, isProject, projectEnd) =>
+      create: (name, amBudget, advBudget, amEmpId, advEmpId, contractStart, isProject, projectEnd, lexofficeName) =>
         q(s => s.from('clients')
           .insert({ name, am_budget: amBudget || null, adv_budget: advBudget || null,
                     am_employee_id: amEmpId || null, adv_employee_id: advEmpId || null,
                     contract_start: contractStart || null,
-                    is_project: !!isProject, project_end: projectEnd || null })
+                    is_project: !!isProject, project_end: projectEnd || null,
+                    lexoffice_name: lexofficeName || null })
           .select().single()),
       update: (id, fields) =>
         q(s => s.from('clients').update(fields).eq('id', id).select().single()),

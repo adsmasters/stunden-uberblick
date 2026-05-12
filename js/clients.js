@@ -26,6 +26,7 @@
     projectEndField.style.display = clientIsProject.checked ? '' : 'none';
     if (!clientIsProject.checked) clientEndInput.value = '';
   });
+  var clientLexofficeName = document.getElementById('clientLexofficeName');
   var clientModalClose   = document.getElementById('clientModalClose');
   var clientModalCancel  = document.getElementById('clientModalCancel');
   var clientModalSave    = document.getElementById('clientModalSave');
@@ -118,6 +119,7 @@
     clientIsProject.checked  = !!(client && client.is_project);
     clientEndInput.value     = (client && client.project_end)
       ? client.project_end.substring(0, 7) : '';
+    clientLexofficeName.value = (client && client.lexoffice_name) || '';
     projectEndField.style.display = clientIsProject.checked ? '' : 'none';
     clientModal.classList.remove('hidden');
     clientNameInput.focus();
@@ -138,9 +140,10 @@
     var amEmp  = clientAmEmpSelect.value  || null;
     var advEmp = clientAdvEmpSelect.value || null;
     // Store as "YYYY-MM-01" date string (Postgres date column)
-    var contractStart = clientStartInput.value ? clientStartInput.value + '-01' : null;
-    var isProject     = clientIsProject.checked;
-    var projectEnd    = (isProject && clientEndInput.value) ? clientEndInput.value + '-01' : null;
+    var contractStart  = clientStartInput.value ? clientStartInput.value + '-01' : null;
+    var isProject      = clientIsProject.checked;
+    var projectEnd     = (isProject && clientEndInput.value) ? clientEndInput.value + '-01' : null;
+    var lexofficeName  = clientLexofficeName.value.trim() || null;
 
     clientModalSave.disabled    = true;
     clientModalSave.textContent = 'Speichern…';
@@ -148,10 +151,11 @@
     var fields = { name: name, am_budget: am, adv_budget: adv,
                    am_employee_id: amEmp, adv_employee_id: advEmp,
                    contract_start: contractStart,
-                   is_project: isProject, project_end: projectEnd };
+                   is_project: isProject, project_end: projectEnd,
+                   lexoffice_name: lexofficeName };
     var promise = editingClientId
       ? window.db.clients.update(editingClientId, fields)
-      : window.db.clients.create(name, am, adv, amEmp, advEmp, contractStart, isProject, projectEnd);
+      : window.db.clients.create(name, am, adv, amEmp, advEmp, contractStart, isProject, projectEnd, lexofficeName);
 
     promise.then(function () {
       closeClientModal();

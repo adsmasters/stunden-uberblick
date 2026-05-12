@@ -16,6 +16,7 @@
       <a href="clients.html"     class="nav-link">Kunden</a>
       <a href="employees.html"   class="nav-link">Mitarbeiter</a>
       <a href="utilization.html" class="nav-link">Auslastung</a>
+      <a href="profit.html"      class="nav-link">Profitabilität</a>
       <a href="settings.html"    class="nav-link active">Einstellungen</a>
     </nav>
   </div>
@@ -31,6 +32,30 @@
   </div>
 
   <div class="settings-grid">
+
+    <!-- LexOffice connection -->
+    <div class="card">
+      <div class="card-header">
+        <h2>💶 LexOffice-Verbindung</h2>
+        <span id="lexofficeStatus"></span>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info" style="margin-bottom:20px">
+          Trage deinen LexOffice API-Key ein. Den Key findest du unter:
+          <strong>app.lexoffice.de → Einstellungen → Integrationen → Öffentliche API</strong>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;max-width:520px">
+          <div class="field">
+            <label for="lexofficeKey">LexOffice API Key</label>
+            <input type="password" id="lexofficeKey" placeholder="••••••••••••••••••••••••••••••••" autocomplete="off" style="font-family:monospace;font-size:12px">
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <button id="lexofficeSaveBtn" class="btn btn-primary">Verbindung speichern &amp; testen</button>
+            <span id="lexofficeSaveStatus" style="font-size:13px"></span>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Step 0: Clockify connection -->
     <div class="card">
@@ -251,6 +276,7 @@ git push -u origin main</pre>
 <script src="js/db.js"></script>
 <script src="js/utils.js"></script>
 <script src="js/clockify.js"></script>
+<script src="js/lexoffice.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/settings.js"></script>
 </body>
