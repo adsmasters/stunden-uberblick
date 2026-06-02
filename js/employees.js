@@ -14,7 +14,6 @@
   const empName        = document.getElementById('empName');
   const empRole        = document.getElementById('empRole');
   const empEmail       = document.getElementById('empEmail');
-  const empCost        = document.getElementById('empCost');
   const empActive      = document.getElementById('empActive');
   const roleHint       = document.getElementById('roleHint');
   const empModalClose  = document.getElementById('empModalClose');
@@ -49,7 +48,6 @@
     empName.value    = emp?.name   ?? '';
     empRole.value    = emp?.role   ?? 'account_manager';
     empEmail.value   = emp?.email  ?? '';
-    empCost.value    = emp?.monthly_cost > 0 ? emp.monthly_cost : '';
     empActive.checked = emp ? !!emp.active : true;
     document.getElementById('activeField').classList.toggle('hidden', !emp);
     roleHint.textContent = ROLE_HINTS[empRole.value] || '';
@@ -69,15 +67,14 @@
 
     const role        = empRole.value;
     const email       = empEmail.value.trim() || null;
-    const monthlyCost = parseFloat(empCost.value) || 0;
     const active      = empActive.checked;
 
     empModalSave.disabled = true;
     empModalSave.textContent = 'Speichern…';
 
     const promise = editingId
-      ? window.db.employees.update(editingId, { name, role, email, active, monthly_cost: monthlyCost })
-      : window.db.employees.create(name, role, email, monthlyCost);
+      ? window.db.employees.update(editingId, { name, role, email, active })
+      : window.db.employees.create(name, role, email);
 
     promise
       .then(() => { closeEmpModal(); loadEmployees(); })
@@ -145,15 +142,10 @@
       const tr = document.createElement('tr');
       if (!emp.active) tr.style.opacity = '0.5';
 
-      const costFmt = emp.monthly_cost > 0
-        ? emp.monthly_cost.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' €'
-        : '<span style="color:var(--text-muted)">—</span>';
-
       tr.innerHTML = `
         <td style="font-weight:500">${emp.name}</td>
         <td><span class="role-badge ${roleCls}">${roleLabel}</span></td>
         <td style="color:var(--text-secondary)">${emp.email || '<span class="text-muted">—</span>'}</td>
-        <td class="right" style="font-variant-numeric:tabular-nums">${costFmt}</td>
         <td class="center">
           <span style="font-size:16px">${emp.active ? '✓' : '–'}</span>
         </td>
