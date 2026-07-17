@@ -94,6 +94,16 @@
         if (ws) {
           setClockifyStatus('Verbunden mit Workspace „' + ws.name + '" ✓', 'success');
           clockifyStatusEl.innerHTML = '<span class="badge badge-ok">✓ ' + ws.name + '</span>';
+          // ── Persist to Supabase so all users get the key automatically ──
+          Promise.all([
+            window.db.settings.set('clockify_key',            key),
+            window.db.settings.set('clockify_workspace_id',   ws.id),
+            window.db.settings.set('clockify_workspace_name', ws.name),
+          ]).then(function () {
+            setClockifyStatus('Verbunden mit Workspace „' + ws.name + '" ✓ · für alle gespeichert', 'success');
+          }).catch(function () {
+            setClockifyStatus('Verbunden ✓ · Supabase-Speicherung fehlgeschlagen (Tabelle fehlt?)', 'warn');
+          });
         } else {
           setClockifyStatus('Verbunden, aber kein Workspace „Adsmasters" gefunden.', 'error');
         }
@@ -116,7 +126,7 @@
 
   lexofficeKeyInput.value = localStorage.getItem('lexofficeKey') || '';
 
-  if (window.lexoffice.isConfigured()) {
+  if (window.lexoffice && window.lexoffice.isConfigured()) {
     lexofficeStatusEl.innerHTML = '<span class="badge badge-ok">✓ Verbunden</span>';
   }
 
@@ -127,27 +137,30 @@
       type === 'error'   ? 'var(--danger)'  : 'var(--text-secondary)';
   }
 
-  lexofficeSaveBtn.addEventListener('click', function () {
-    var key = lexofficeKeyInput.value.trim();
-    if (!key) { setLexofficeStatus('Bitte API Key eingeben.', 'error'); return; }
-    localStorage.setItem('lexofficeKey', key);
-    lexofficeSaveBtn.disabled = true;
-    lexofficeSaveBtn.textContent = 'Teste Verbindung…';
-    setLexofficeStatus('', '');
-    window.lexoffice.testConnection()
-      .then(function () {
-        setLexofficeStatus('Verbindung erfolgreich ✓', 'success');
-        lexofficeStatusEl.innerHTML = '<span class="badge badge-ok">✓ Verbunden</span>';
-      })
-      .catch(function (e) {
-        setLexofficeStatus('Fehler: ' + e.message, 'error');
-        lexofficeStatusEl.innerHTML = '<span class="badge badge-over">✗ Fehler</span>';
-      })
-      .finally(function () {
-        lexofficeSaveBtn.disabled = false;
-        lexofficeSaveBtn.textContent = 'Verbindung speichern & testen';
-      });
-  });
+  if (lexofficeSaveBtn) {
+    lexofficeSaveBtn.addEventListener('click', function () {
+      var key = lexofficeKeyInput.value.trim();
+      if (!key) { setLexofficeStatus('Bitte API Key eingeben.', 'error'); return; }
+      localStorage.setItem('lexofficeKey', key);
+      lexofficeSaveBtn.disabled = true;
+      lexofficeSaveBtn.textContent = 'Teste Verbindung…';
+      setLexofficeStatus('', '');
+      window.lexoffice.testConnection()
+        .then(function () {
+          setLexofficeStatus('Verbindung erfolgreich ✓', 'success');
+          lexofficeStatusEl.innerHTML = '<span class="badge badge-ok">✓ Verbunden</span>';
+        })
+        .catch(function (e) {
+          setLexofficeStatus('Fehler: ' + e.message, 'error');
+          lexofficeStatusEl.innerHTML = '<span class="badge badge-over">✗ Fehler</span>';
+        })
+        .finally(function () {
+          lexofficeSaveBtn.disabled = false;
+          lexofficeSaveBtn.textContent = 'Verbindung speichern & testen';
+        });
+    });
+  }
+
 
   copyBtn.addEventListener('click', function () {
     if (navigator.clipboard && navigator.clipboard.writeText) {

@@ -16,17 +16,10 @@
   var clientAdvInput     = document.getElementById('clientAdvInput');
   var clientAmEmpSelect  = document.getElementById('clientAmEmpSelect');
   var clientAdvEmpSelect = document.getElementById('clientAdvEmpSelect');
-  var clientStartInput   = document.getElementById('clientStartInput');
-  var clientEndInput     = document.getElementById('clientEndInput');
-  var clientIsProject    = document.getElementById('clientIsProject');
-  var projectEndField    = document.getElementById('projectEndField');
-
-  // Show/hide project end field based on checkbox
-  clientIsProject.addEventListener('change', function () {
-    projectEndField.style.display = clientIsProject.checked ? '' : 'none';
-    if (!clientIsProject.checked) clientEndInput.value = '';
-  });
-  var clientLexofficeName = document.getElementById('clientLexofficeName');
+  var clientStartInput       = document.getElementById('clientStartInput');
+  var clientContractEndInput = document.getElementById('clientContractEndInput');
+  var clientIsProject        = document.getElementById('clientIsProject');
+  var clientLexofficeName    = document.getElementById('clientLexofficeName');
   var clientModalClose   = document.getElementById('clientModalClose');
   var clientModalCancel  = document.getElementById('clientModalCancel');
   var clientModalSave    = document.getElementById('clientModalSave');
@@ -117,10 +110,11 @@
     clientStartInput.value   = (client && client.contract_start)
       ? client.contract_start.substring(0, 7) : '';
     clientIsProject.checked  = !!(client && client.is_project);
-    clientEndInput.value     = (client && client.project_end)
-      ? client.project_end.substring(0, 7) : '';
-    clientLexofficeName.value = (client && client.lexoffice_name) || '';
-    projectEndField.style.display = clientIsProject.checked ? '' : 'none';
+    // Prefer contract_end; fall back to project_end for legacy data
+    var endVal = (client && client.contract_end) ? client.contract_end
+               : (client && client.project_end)  ? client.project_end : null;
+    clientContractEndInput.value  = endVal ? endVal.substring(0, 7) : '';
+    clientLexofficeName.value     = (client && client.lexoffice_name) || '';
     clientModal.classList.remove('hidden');
     clientNameInput.focus();
   }
@@ -140,10 +134,10 @@
     var amEmp  = clientAmEmpSelect.value  || null;
     var advEmp = clientAdvEmpSelect.value || null;
     // Store as "YYYY-MM-01" date string (Postgres date column)
-    var contractStart  = clientStartInput.value ? clientStartInput.value + '-01' : null;
-    var isProject      = clientIsProject.checked;
-    var projectEnd     = (isProject && clientEndInput.value) ? clientEndInput.value + '-01' : null;
-    var lexofficeName  = clientLexofficeName.value.trim() || null;
+    var contractStart = clientStartInput.value ? clientStartInput.value + '-01' : null;
+    var contractEnd   = clientContractEndInput.value ? clientContractEndInput.value + '-01' : null;
+    var isProject     = clientIsProject.checked;
+    var lexofficeName = clientLexofficeName.value.trim() || null;
 
     clientModalSave.disabled    = true;
     clientModalSave.textContent = 'Speichern…';
@@ -151,11 +145,13 @@
     var fields = { name: name, am_budget: am, adv_budget: adv,
                    am_employee_id: amEmp, adv_employee_id: advEmp,
                    contract_start: contractStart,
-                   is_project: isProject, project_end: projectEnd,
+                   contract_end:   contractEnd,
+                   is_project: isProject,
+                   project_end: contractEnd,
                    lexoffice_name: lexofficeName };
     var promise = editingClientId
       ? window.db.clients.update(editingClientId, fields)
-      : window.db.clients.create(name, am, adv, amEmp, advEmp, contractStart, isProject, projectEnd, lexofficeName);
+      : window.db.clients.create(name, am, adv, amEmp, advEmp, contractStart, isProject, contractEnd, contractEnd, lexofficeName);
 
     promise.then(function () {
       closeClientModal();
@@ -232,15 +228,23 @@
   }
 
   function typeBadge(c) {
-    if (!c.is_project) return '<span class="type-badge type-retainer">Retainer</span>';
-    var label = 'Projekt';
-    if (c.contract_start || c.project_end) {
-      var parts = [];
-      if (c.contract_start) parts.push(fmtMonthShort(c.contract_start));
-      if (c.project_end)    parts.push(fmtMonthShort(c.project_end));
-      if (parts.length) label += '<br><span style="font-size:10px;font-weight:400">' + parts.join(' – ') + '</span>';
-    }
-    return '<span class="type-badge type-project">' + label + '</span>';
+    var endDate = c.contract_end || c.project_end || null;
+    var label   = c.is_project ? 'Projekt' : 'Retainer';
+    var cls     = c.is_project ? 'type-project' : 'type-retainer';
+    var parts   = [];
+    if (c.contract_start) parts.push(fmtMonthShort(c.contract_start));
+    if (endDate)          parts.push(fmtMonthShort(endDate));
+    var sub = parts.length
+      ? '<br><span style="font-size:10px;font-weight:400">' + parts.join(' – ') + '</span>'
+      : '';
+    var today = new Date();
+    var ended = endDate && (function () {
+      var d = new Date(endDate);
+      return today.getFullYear() > d.getUTCFullYear() ||
+             (today.getFullYear() === d.getUTCFullYear() && today.getMonth() > d.getUTCMonth());
+    })();
+    var style = ended ? ';opacity:.5' : '';
+    return '<span class="type-badge ' + cls + '" style="' + style + '">' + label + sub + '</span>';
   }
 
   function fmtMonthShort(dateStr) {

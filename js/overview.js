@@ -1,16 +1,122 @@
 (function () {
   'use strict';
 
-  const yearSel   = document.getElementById('yearSelect');
-  const loadBtn   = document.getElementById('loadBtn');
-  const syncBtn   = document.getElementById('syncBtn');
-  const tableWrap = document.getElementById('tableWrap');
-  const tbody     = document.getElementById('clientsBody');
-  const loadingEl = document.getElementById('loading');
-  const errorEl   = document.getElementById('error');
-  const setupHint = document.getElementById('setupHint');
-  const summaryEl = document.getElementById('summary');
-  const emptyEl   = document.getElementById('emptyClients');
+  const yearSel       = document.getElementById('yearSelect');
+  const loadBtn       = document.getElementById('loadBtn');
+  const syncBtn       = document.getElementById('syncBtn');
+  const tableWrap     = document.getElementById('tableWrap');
+  const tbody         = document.getElementById('clientsBody');
+  const loadingEl     = document.getElementById('loading');
+  const errorEl       = document.getElementById('error');
+  const setupHint     = document.getElementById('setupHint');
+  const summaryEl     = document.getElementById('summary');
+  const emptyEl       = document.getElementById('emptyClients');
+  const searchInput   = document.getElementById('clientSearch');
+  const empFilterWrap = document.getElementById('empFilterWrap');
+
+  // ── Filter state ──────────────────────────────────────────────────────
+  let searchText     = '';
+  let selectedEmpIds = new Set();
+
+  function applyFilters(rows) {
+    const text = searchText.toLowerCase().trim();
+    return rows.filter(function (row) {
+      const c = row.client;
+      if (text && !c.name.toLowerCase().includes(text)) return false;
+      if (selectedEmpIds.size > 0) {
+        const match = (c.am_employee_id  && selectedEmpIds.has(c.am_employee_id)) ||
+                      (c.adv_employee_id && selectedEmpIds.has(c.adv_employee_id));
+        if (!match) return false;
+      }
+      return true;
+    });
+  }
+
+  function buildEmpFilter(rows) {
+    const empMap = {};
+    rows.forEach(function (row) {
+      const c = row.client;
+      if (c.am_emp)  empMap[c.am_emp.id]  = c.am_emp;
+      if (c.adv_emp) empMap[c.adv_emp.id] = c.adv_emp;
+    });
+    const emps = Object.values(empMap).sort(function (a, b) { return a.name.localeCompare(b.name); });
+
+    if (!emps.length) { empFilterWrap.innerHTML = ''; return; }
+
+    const btnStyle = [
+      'display:inline-flex;align-items:center;gap:6px;padding:0 10px;height:32px;',
+      'border:1px solid var(--border);border-radius:6px;background:var(--card-bg);',
+      'color:var(--text);font-size:13px;cursor:pointer;white-space:nowrap;',
+      'transition:border-color .15s',
+    ].join('');
+
+    const panelStyle = [
+      'position:absolute;top:calc(100% + 4px);left:0;z-index:200;min-width:180px;',
+      'background:var(--card-bg);border:1px solid var(--border);border-radius:8px;',
+      'box-shadow:0 4px 16px rgba(0,0,0,.12);padding:6px 0;',
+    ].join('');
+
+    empFilterWrap.innerHTML =
+      '<button id="empFBtn" style="' + btnStyle + '">' +
+        '<span id="empFLabel">Alle Mitarbeiter</span>' +
+        '<svg width="10" height="10" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4"/></svg>' +
+      '</button>' +
+      '<div id="empFPanel" style="' + panelStyle + 'display:none">' +
+        '<button id="empFClear" style="display:block;width:100%;text-align:left;padding:5px 14px;' +
+          'font-size:12px;color:var(--text-muted);background:none;border:none;cursor:pointer;' +
+          'border-bottom:1px solid var(--border);margin-bottom:4px">Alle abwählen</button>' +
+        '<div id="empFList"></div>' +
+      '</div>';
+
+    const btn   = document.getElementById('empFBtn');
+    const panel = document.getElementById('empFPanel');
+    const label = document.getElementById('empFLabel');
+    const clear = document.getElementById('empFClear');
+    const list  = document.getElementById('empFList');
+
+    emps.forEach(function (emp) {
+      const itemStyle = 'display:flex;align-items:center;gap:8px;padding:5px 14px;cursor:pointer;font-size:13px';
+      const el = document.createElement('label');
+      el.style.cssText = itemStyle + ';color:var(--text)';
+      el.innerHTML = '<input type="checkbox" value="' + emp.id + '" style="accent-color:var(--primary);cursor:pointer"> ' + emp.name;
+      el.querySelector('input').addEventListener('change', function () {
+        if (this.checked) selectedEmpIds.add(emp.id);
+        else              selectedEmpIds.delete(emp.id);
+        updateEmpLabel();
+        renderTable(lastRows, parseInt(yearSel.value), lastMaxMonth);
+        updateSortHeaders();
+      });
+      list.appendChild(el);
+    });
+
+    function updateEmpLabel() {
+      if (selectedEmpIds.size === 0) label.textContent = 'Alle Mitarbeiter';
+      else if (selectedEmpIds.size === 1) {
+        const id = [...selectedEmpIds][0];
+        label.textContent = empMap[id] ? empMap[id].name : '1 ausgewählt';
+      } else {
+        label.textContent = selectedEmpIds.size + ' ausgewählt';
+      }
+    }
+
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    });
+
+    clear.addEventListener('click', function (e) {
+      e.stopPropagation();
+      selectedEmpIds.clear();
+      list.querySelectorAll('input[type=checkbox]').forEach(function (cb) { cb.checked = false; });
+      updateEmpLabel();
+      panel.style.display = 'none';
+      renderTable(lastRows, parseInt(yearSel.value), lastMaxMonth);
+      updateSortHeaders();
+    });
+
+    document.addEventListener('click', function () { panel.style.display = 'none'; });
+    panel.addEventListener('click', function (e) { e.stopPropagation(); });
+  }
 
   // ── Working-day helpers ───────────────────────────────────────────────
   // Count Mon–Fri days in a given year/month
@@ -50,10 +156,12 @@
       const csY = client.contract_start ? d.getUTCFullYear() : 0;
       const csM = client.contract_start ? d.getUTCMonth() + 1 : 1;
       if (csY > year || (csY === year && m < csM)) continue;
-      if (client.is_project && client.project_end) {
-        const pe  = new Date(client.project_end);
-        const peY = pe.getUTCFullYear(), peM = pe.getUTCMonth() + 1;
-        if (year > peY || (year === peY && m > peM)) continue;
+      // contract_end applies to all clients; fall back to project_end for legacy data
+      const endDate = client.contract_end || (client.is_project ? client.project_end : null);
+      if (endDate) {
+        const ed  = new Date(endDate);
+        const edY = ed.getUTCFullYear(), edM = ed.getUTCMonth() + 1;
+        if (year > edY || (year === edY && m > edM)) continue;
       }
       const adj    = adjs[m] || null;
       const adjAmH  = adj ? (adj.am_hours  || 0) : 0;
@@ -85,12 +193,13 @@
     }
     // Determine end month for this year
     let endM = maxMonth;
-    if (client.is_project && client.project_end) {
-      const d   = new Date(client.project_end);
-      const peY = d.getUTCFullYear();
-      const peM = d.getUTCMonth() + 1;
-      if (peY < year) return 0;                        // project ended before this year
-      if (peY === year) endM = Math.min(maxMonth, peM); // cap at project end
+    const endDate2 = client.contract_end || (client.is_project ? client.project_end : null);
+    if (endDate2) {
+      const d   = new Date(endDate2);
+      const edY = d.getUTCFullYear();
+      const edM = d.getUTCMonth() + 1;
+      if (edY < year) return 0;
+      if (edY === year) endM = Math.min(maxMonth, edM);
     }
     return Math.max(0, endM - startM + 1);
   }
@@ -249,8 +358,8 @@
       if (thAmSub)  thAmSub.textContent  = periodLabel2 + ' · inkl. FL÷3';
       if (thAdvSub) thAdvSub.textContent = periodLabel2;
 
+      buildEmpFilter(rows);
       renderTable(rows, year, maxMonth);
-      renderSummary(rows, year, maxMonth);
       updateSortHeaders();
       hideLoading();
       tableWrap.classList.remove('hidden');
@@ -265,7 +374,18 @@
   // ── Render table ──────────────────────────────────────────────────────
   function renderTable(rows, year, maxMonth) {
     tbody.innerHTML = '';
-    const sorted = sortRows(rows, maxMonth);
+    const filtered = applyFilters(rows);
+    const sorted   = sortRows(filtered, maxMonth);
+
+    // Update summary with filtered rows
+    renderSummary(filtered, year, maxMonth);
+
+    if (!sorted.length && rows.length > 0) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);font-size:14px">Keine Kunden gefunden.</td>';
+      tbody.appendChild(tr);
+      return;
+    }
 
     sorted.forEach((row, i) => {
       const { client: c, entries: clientEntries, agg, adjs } = row;
@@ -504,6 +624,14 @@
   }
 
   // ── Boot ──────────────────────────────────────────────────────────────
+  searchInput.addEventListener('input', function () {
+    searchText = searchInput.value;
+    if (lastRows.length) {
+      renderTable(lastRows, parseInt(yearSel.value), lastMaxMonth);
+      updateSortHeaders();
+    }
+  });
+
   if (!window.isConfigured()) {
     setupHint.classList.remove('hidden');
   } else {
