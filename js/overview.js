@@ -22,7 +22,7 @@
     const text = searchText.toLowerCase().trim();
     return rows.filter(function (row) {
       const c = row.client;
-      if (text && !c.name.toLowerCase().includes(text)) return false;
+      if (text && !c.name.toLowerCase().startsWith(text)) return false;
       if (selectedEmpIds.size > 0) {
         const match = (c.am_employee_id  && selectedEmpIds.has(c.am_employee_id)) ||
                       (c.adv_employee_id && selectedEmpIds.has(c.adv_employee_id));
@@ -45,14 +45,14 @@
 
     const btnStyle = [
       'display:inline-flex;align-items:center;gap:6px;padding:0 10px;height:32px;',
-      'border:1px solid var(--border);border-radius:6px;background:var(--card-bg);',
+      'border:1px solid var(--border);border-radius:6px;background:#fff;',
       'color:var(--text);font-size:13px;cursor:pointer;white-space:nowrap;',
       'transition:border-color .15s',
     ].join('');
 
     const panelStyle = [
       'position:absolute;top:calc(100% + 4px);left:0;z-index:200;min-width:180px;',
-      'background:var(--card-bg);border:1px solid var(--border);border-radius:8px;',
+      'background:#fff;border:1px solid var(--border);border-radius:8px;',
       'box-shadow:0 4px 16px rgba(0,0,0,.12);padding:6px 0;',
     ].join('');
 
