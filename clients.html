@@ -121,10 +121,10 @@
           <input type="month" id="clientStartInput">
           <span class="hint">Budget ab diesem Monat</span>
         </div>
-        <div class="field" id="projectEndField" style="display:none">
-          <label for="clientEndInput">Projektende</label>
-          <input type="month" id="clientEndInput">
-          <span class="hint">Budget bis diesem Monat</span>
+        <div class="field">
+          <label for="clientContractEndInput">Vertragsende <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
+          <input type="month" id="clientContractEndInput">
+          <span class="hint">Keine Berechnung nach diesem Monat</span>
         </div>
       </div>
       <div class="field" style="flex-direction:row;align-items:center;gap:10px">
@@ -165,6 +165,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/db.js"></script>
+<script src="js/appsettings.js"></script>
 <script src="js/utils.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/clients.js"></script>

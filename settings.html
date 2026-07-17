@@ -219,6 +219,19 @@ alter table clients
   add column if not exists adv_employee_id uuid references employees(id) on delete set null,
   add column if not exists contract_start  date;
 
+-- Gesamtstunden pro Mitarbeiter/Monat (für Auslastung inkl. interne Zeit)
+create table if not exists util_hours (
+  id          uuid primary key default gen_random_uuid(),
+  employee_id uuid not null references employees(id) on delete cascade,
+  year        int  not null,
+  month       int  not null,
+  hours       numeric not null default 0,
+  updated_at  timestamptz default now(),
+  constraint util_hours_unique unique (employee_id, year, month)
+);
+alter table util_hours disable row level security;
+
+
 -- Projektkunden-Felder
 alter table clients
   add column if not exists is_project  boolean not null default false,
@@ -273,6 +286,7 @@ git push -u origin main</pre>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/db.js"></script>
+<script src="js/appsettings.js"></script>
 <script src="js/utils.js"></script>
 <script src="js/clockify.js"></script>
 <script src="js/lexoffice.js"></script>
