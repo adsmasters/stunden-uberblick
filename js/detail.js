@@ -63,12 +63,13 @@
     if (!cs) return false;
     return year < cs.year || (year === cs.year && month < cs.month);
   }
-  function isAfterProject(year, month, client) {
-    if (!client.is_project || !client.project_end) return false;
-    var d   = new Date(client.project_end);
-    var peY = d.getUTCFullYear();
-    var peM = d.getUTCMonth() + 1;
-    return year > peY || (year === peY && month > peM);
+  function isAfterContract(year, month, client) {
+    var endDate = client.contract_end || client.project_end || null;
+    if (!endDate) return false;
+    var d   = new Date(endDate);
+    var endY = d.getUTCFullYear();
+    var endM = d.getUTCMonth() + 1;
+    return year > endY || (year === endY && month > endM);
   }
   var modalState     = null; // { year, month }
   var adjState       = null; // { year, month, existing: adj|null }
@@ -175,7 +176,7 @@
 
       // No budget comparison for months outside contract/project period
       var beforeContract = isBeforeContract(year, month, client);
-      var afterProject   = isAfterProject(year, month, client);
+      var afterProject   = isAfterContract(year, month, client);
       var outOfPeriod    = beforeContract || afterProject;
 
       // Effective budget = monthly budget ± correction
@@ -201,7 +202,7 @@
         : beforeContract
           ? '<span class="text-muted" style="font-size:11px">vor Vertragsstart</span>'
           : afterProject
-          ? '<span class="text-muted" style="font-size:11px">Projekt beendet</span>'
+          ? '<span class="text-muted" style="font-size:11px">Vertrag beendet</span>'
           : overBadges.length
             ? '<div class="over-badges">' + overBadges.join('') + '</div>'
             : hasBudget
@@ -357,7 +358,7 @@
     for (var m = 1; m <= 12; m++) {
       if (year > ym.year || (year === ym.year && m > ym.month)) continue;
       if (isBeforeContract(year, m, client)) continue;
-      if (isAfterProject(year, m, client))  continue;
+      if (isAfterContract(year, m, client))  continue;
       var agg = window.aggregateEntries(entriesByMonth[m] || []);
       var adj = adjByMonth[m] || null;
       var adjAmH  = adj ? (adj.am_hours  || 0) : 0;
