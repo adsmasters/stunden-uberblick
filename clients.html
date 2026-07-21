@@ -127,11 +127,19 @@
           <span class="hint">Keine Berechnung nach diesem Monat</span>
         </div>
       </div>
-      <div class="field" style="flex-direction:row;align-items:center;gap:10px">
-        <input type="checkbox" id="clientIsProject" style="width:auto;padding:0;accent-color:var(--primary)">
-        <label for="clientIsProject" style="margin:0;cursor:pointer;font-size:13.5px">
-          Projektkunde <span style="color:var(--text-muted);font-weight:400;font-size:12px">(einmaliges Projekt mit fixer Laufzeit)</span>
-        </label>
+      <div class="field">
+        <label>Kundentyp</label>
+        <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden;width:fit-content">
+          <button type="button" id="typeRetainerBtn"
+            style="padding:6px 16px;font-size:13px;cursor:pointer;border:none;border-right:1px solid var(--border);transition:background .15s,color .15s">
+            Retainer
+          </button>
+          <button type="button" id="typeProjectBtn"
+            style="padding:6px 16px;font-size:13px;cursor:pointer;border:none;transition:background .15s,color .15s">
+            Projekt
+          </button>
+        </div>
+        <input type="hidden" id="clientIsProject" value="0">
       </div>
       <div class="field">
         <label for="clientLexofficeName">LexOffice Kontaktname <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
