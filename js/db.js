@@ -129,6 +129,17 @@
         ).select().single()),
     },
 
+    projectBookings: {
+      forClient: (clientId) =>
+        q(s => s.from('project_bookings').select('*').eq('client_id', clientId).order('start_month')),
+      create: (fields) =>
+        q(s => s.from('project_bookings').insert(fields).select().single()),
+      update: (id, fields) =>
+        q(s => s.from('project_bookings').update(fields).eq('id', id).select().single()),
+      delete: (id) =>
+        q(s => s.from('project_bookings').delete().eq('id', id)),
+    },
+
     entries: {
       // All entries for a month across all clients (includes employee data)
       forMonth: (year, month) =>

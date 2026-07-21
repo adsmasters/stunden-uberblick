@@ -118,6 +118,180 @@
     loadingEl.classList.add('hidden');
   }
 
+  // ── Booking helpers ───────────────────────────────────────────────────
+  var allBookings = [];
+
+  function bookingHoursForMonth(year, month) {
+    var h = 0;
+    allBookings.forEach(function (b) {
+      var sd  = new Date(b.start_month);
+      var sy  = sd.getUTCFullYear(), sm = sd.getUTCMonth() + 1;
+      var cur = (year - 1) * 12 + month;
+      var sta = (sy   - 1) * 12 + sm;
+      var end = sta + b.months_count - 1;
+      if (cur >= sta && cur <= end) {
+        h += (b.amount / b.hourly_rate) / b.months_count;
+      }
+    });
+    return h;
+  }
+
+  function fmtEur(n) { return n.toLocaleString('de-DE') + ' €'; }
+
+  function bookingPeriodLabel(b) {
+    var sd = new Date(b.start_month);
+    var sy = sd.getUTCFullYear(), sm = sd.getUTCMonth();
+    if (b.months_count === 1) return window.MONTHS_DE[sm] + ' ' + sy;
+    var totalM = (sy - 1) * 12 + sm + 1 + b.months_count - 1;
+    var ey = Math.floor((totalM - 1) / 12) + 1;
+    var em = ((totalM - 1) % 12);
+    return window.MONTHS_DE[sm] + ' ' + sy + ' – ' + window.MONTHS_DE[em] + ' ' + ey;
+  }
+
+  // ── Render bookings card ──────────────────────────────────────────────
+  var bookingsWrap = document.getElementById('bookingsWrap');
+
+  function renderBookings() {
+    if (!bookingsWrap) return;
+    var rows = allBookings.map(function (b) {
+      var totalH   = b.amount / b.hourly_rate;
+      var perMonthH = totalH / b.months_count;
+      return '<tr>' +
+        '<td style="font-size:13px">' + bookingPeriodLabel(b) + (b.note ? '<br><span style="font-size:11px;color:var(--text-muted)">' + b.note + '</span>' : '') + '</td>' +
+        '<td class="right" style="font-size:13px;white-space:nowrap">' + fmtEur(b.amount) + '</td>' +
+        '<td class="right" style="font-size:13px">' + b.hourly_rate + ' €/h</td>' +
+        '<td class="right" style="font-size:13px;white-space:nowrap">' + window.fmtHours(totalH) +
+          (b.months_count > 1 ? '<br><span style="font-size:11px;color:var(--text-muted)">' + window.fmtHours(perMonthH) + '/Mo</span>' : '') + '</td>' +
+        '<td class="center"><button class="btn btn-ghost btn-sm booking-edit-btn" data-id="' + b.id + '">' +
+          '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+        '</button></td>' +
+      '</tr>';
+    }).join('');
+
+    bookingsWrap.innerHTML =
+      '<div class="card">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px 0">' +
+          '<span style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)">Projektbuchungen</span>' +
+          '<button id="addBookingBtn" class="btn btn-primary btn-sm">+ Buchung hinzufügen</button>' +
+        '</div>' +
+        (allBookings.length
+          ? '<div class="table-wrap"><table><thead><tr>' +
+              '<th style="min-width:160px">Zeitraum</th>' +
+              '<th class="right">Betrag</th>' +
+              '<th class="right">Satz</th>' +
+              '<th class="right">Stunden</th>' +
+              '<th class="center" style="width:50px"></th>' +
+            '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+          : '<div style="padding:14px 18px;font-size:13px;color:var(--text-muted)">Noch keine Buchungen hinterlegt.</div>'
+        ) +
+      '</div>';
+    bookingsWrap.classList.remove('hidden');
+
+    document.getElementById('addBookingBtn').addEventListener('click', function () { openBookingModal(null); });
+    bookingsWrap.querySelectorAll('.booking-edit-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var booking = allBookings.find(function (b) { return b.id === btn.dataset.id; });
+        if (booking) openBookingModal(booking);
+      });
+    });
+  }
+
+  // ── Booking modal ─────────────────────────────────────────────────────
+  var bookingModal       = document.getElementById('bookingModal');
+  var bookingModalTitle  = document.getElementById('bookingModalTitle');
+  var bookingAmount      = document.getElementById('bookingAmount');
+  var bookingRate        = document.getElementById('bookingRate');
+  var bookingStart       = document.getElementById('bookingStart');
+  var bookingMonthsInp   = document.getElementById('bookingMonths');
+  var bookingCalc        = document.getElementById('bookingCalc');
+  var bookingNote        = document.getElementById('bookingNote');
+  var bookingModalClose  = document.getElementById('bookingModalClose');
+  var bookingModalCancel = document.getElementById('bookingModalCancel');
+  var bookingModalSave   = document.getElementById('bookingModalSave');
+  var bookingModalDelete = document.getElementById('bookingModalDelete');
+  var editingBookingId   = null;
+
+  function updateBookingCalc() {
+    var amt  = parseFloat(bookingAmount.value) || 0;
+    var rate = parseFloat(bookingRate.value)   || 0;
+    var mon  = parseInt(bookingMonthsInp.value) || 1;
+    if (amt > 0 && rate > 0) {
+      var totalH   = amt / rate;
+      var perMonthH = totalH / mon;
+      bookingCalc.textContent = '= ' + window.fmtHours(totalH) + ' gesamt' +
+        (mon > 1 ? ' → ' + window.fmtHours(perMonthH) + '/Monat' : '');
+    } else {
+      bookingCalc.textContent = '';
+    }
+  }
+
+  function openBookingModal(booking) {
+    editingBookingId = booking ? booking.id : null;
+    bookingModalTitle.textContent  = booking ? 'Buchung bearbeiten' : 'Projektbuchung hinzufügen';
+    bookingAmount.value            = booking ? booking.amount      : '';
+    bookingRate.value              = booking ? booking.hourly_rate : '100';
+    bookingStart.value             = booking ? booking.start_month.substring(0, 7) : '';
+    bookingMonthsInp.value         = booking ? booking.months_count : 1;
+    bookingNote.value              = booking ? (booking.note || '') : '';
+    bookingModalDelete.style.display = booking ? '' : 'none';
+    updateBookingCalc();
+    bookingModal.classList.remove('hidden');
+    bookingAmount.focus();
+  }
+
+  function closeBookingModal() { bookingModal.classList.add('hidden'); editingBookingId = null; }
+  bookingModalClose.addEventListener('click',  closeBookingModal);
+  bookingModalCancel.addEventListener('click', closeBookingModal);
+  bookingModal.addEventListener('click', function (e) { if (e.target === bookingModal) closeBookingModal(); });
+
+  [bookingAmount, bookingRate, bookingMonthsInp].forEach(function (el) {
+    el.addEventListener('input', updateBookingCalc);
+  });
+
+  bookingModalSave.addEventListener('click', function () {
+    var amt  = parseFloat(bookingAmount.value);
+    var rate = parseFloat(bookingRate.value);
+    var mon  = parseInt(bookingMonthsInp.value) || 1;
+    var start = bookingStart.value;
+    if (!amt || !rate || !start) {
+      bookingAmount.style.borderColor = !amt   ? 'var(--danger)' : '';
+      bookingStart.style.borderColor  = !start ? 'var(--danger)' : '';
+      return;
+    }
+    bookingAmount.style.borderColor = '';
+    bookingStart.style.borderColor  = '';
+
+    bookingModalSave.disabled    = true;
+    bookingModalSave.textContent = 'Speichern…';
+
+    var fields = {
+      client_id:    clientId,
+      amount:       amt,
+      hourly_rate:  rate,
+      start_month:  start + '-01',
+      months_count: mon,
+      note:         bookingNote.value.trim() || null,
+    };
+    var promise = editingBookingId
+      ? window.db.projectBookings.update(editingBookingId, fields)
+      : window.db.projectBookings.create(fields);
+
+    promise
+      .then(function () { closeBookingModal(); loadData(); })
+      .catch(function (e) { alert('Fehler: ' + e.message); })
+      .finally(function () { bookingModalSave.disabled = false; bookingModalSave.textContent = 'Speichern'; });
+  });
+
+  bookingModalDelete.addEventListener('click', function () {
+    if (!editingBookingId) return;
+    bookingModalDelete.disabled    = true;
+    bookingModalDelete.textContent = 'Löschen…';
+    window.db.projectBookings.delete(editingBookingId)
+      .then(function () { closeBookingModal(); loadData(); })
+      .catch(function (e) { alert('Fehler: ' + e.message); })
+      .finally(function () { bookingModalDelete.disabled = false; bookingModalDelete.textContent = 'Löschen'; });
+  });
+
   // ── Load data ─────────────────────────────────────────────────────────
   function loadData() {
     if (!clientId) { showError('Keine Kunden-ID in der URL.'); return; }
@@ -129,11 +303,13 @@
       window.db.entries.forClientYear(clientId, year),
       window.db.employees.listActive(),
       window.db.adjustments.forClientYear(clientId, year),
+      window.db.projectBookings.forClient(clientId),
     ]).then(function (results) {
       currentClient = results[0];
       var entries      = results[1];
       allEmployees     = results[2];
       var adjustments  = results[3];
+      allBookings      = results[4] || [];
 
       var client = currentClient;
       titleEl.textContent = client.name;
@@ -159,6 +335,7 @@
       var adjByMonth = {};
       (adjustments || []).forEach(function (a) { adjByMonth[a.month] = a; });
 
+      renderBookings();
       renderTable(entriesByMonth, adjByMonth, year, client);
       renderSummary(entriesByMonth, adjByMonth, year, client);
       hideLoading();
@@ -182,10 +359,11 @@
       var agg = window.aggregateEntries(monthEntries);
       var adj = adjByMonth[month] || null;
 
-      // Tracked hours (unchanged by corrections)
-      var amTotal = agg.amTotal;
-      var advH    = agg.advH;
-      var total   = amTotal + advH;
+      // Tracked hours + project bookings
+      var bookingH = !isFuture ? bookingHoursForMonth(year, month) : 0;
+      var amTotal  = agg.amTotal + bookingH;
+      var advH     = agg.advH;
+      var total    = amTotal + advH;
 
       // Correction amounts (applied to budget, not to hours)
       var adjAm  = adj ? (adj.am_hours  || 0) : 0;
@@ -237,24 +415,27 @@
         return b.role === 'account_manager' || b.role === 'freelancer';
       });
 
-      // AM cell – show budget adjustment badge if correction exists
+      // AM cell – badges for budget correction and project booking
       var adjAmBadge = (!isFuture && adjAm !== 0)
         ? ' <span class="adj-badge" title="' + (adj && adj.note ? adj.note : 'Budgetkorrektur') + '">'
           + 'Budget ' + (adjAm > 0 ? '+' : '') + window.fmtHours(adjAm) + '</span>'
+        : '';
+      var bookingBadge = (!isFuture && bookingH > 0)
+        ? ' <span class="adj-badge" title="Projektbuchung">+' + window.fmtHours(bookingH) + ' Buchung</span>'
         : '';
 
       var amCellContent;
       if (isFuture) {
         amCellContent = '<span class="text-muted">–</span>';
-      } else if (hasAMData) {
+      } else if (hasAMData || bookingH > 0) {
         amCellContent =
           '<button class="expand-btn" id="' + btnId + '" data-target="' + expandId + '">' +
             window.svgChevron() + ' ' + window.fmtHours(amTotal) +
-          '</button>' + adjAmBadge +
+          '</button>' + adjAmBadge + bookingBadge +
           (amDiff != null ? '<div style="font-size:11.5px">' + window.fmtDiff(amDiff).text + '</div>' : '');
       } else {
         amCellContent =
-          '<div class="cell-hours"><span class="h-main">' + window.fmtHours(amTotal) + '</span>' +
+          '<div class="cell-hours"><span class="h-main">' + window.fmtHours(amTotal) + '</span>' + adjAmBadge + bookingBadge +
           (amDiff != null ? '<span class="h-diff">' + window.fmtDiff(amDiff).text + '</span>' : '') + '</div>';
       }
 
@@ -380,7 +561,7 @@
       var adjAmH  = adj ? (adj.am_hours  || 0) : 0;
       var adjAdvH = adj ? (adj.adv_hours || 0) : 0;
       var bdgM = budgetForPhase(client, ph);
-      totAm  += agg.amTotal;
+      totAm  += agg.amTotal + bookingHoursForMonth(year, m);
       totAdv += agg.advH;
       if (yearAmB  != null && bdgM.am  != null) yearAmB  += bdgM.am  + adjAmH;
       if (yearAdvB != null && bdgM.adv != null) yearAdvB += bdgM.adv + adjAdvH;
