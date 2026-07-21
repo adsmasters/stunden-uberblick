@@ -253,7 +253,20 @@ create table if not exists adjustments (
   updated_at timestamptz default now(),
   constraint adjustments_unique unique (client_id, year, month)
 );
-alter table adjustments disable row level security;</pre>
+alter table adjustments disable row level security;
+
+-- Projektbuchungen (einmalige Buchungen mit Betrag + Stundensatz)
+create table if not exists project_bookings (
+  id           uuid primary key default gen_random_uuid(),
+  client_id    uuid not null references clients(id) on delete cascade,
+  amount       numeric not null,
+  hourly_rate  numeric not null,
+  start_month  date not null,
+  months_count int  not null default 1,
+  note         text,
+  created_at   timestamptz default now()
+);
+alter table project_bookings disable row level security;</pre>
         </div>
       </div>
     </div>

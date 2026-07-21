@@ -62,6 +62,7 @@
 
   <div id="loading"></div>
   <div id="summary" class="hidden"></div>
+  <div id="bookingsWrap" class="hidden" style="margin-bottom:20px"></div>
 
   <div id="tableWrap" class="card hidden">
     <div class="table-wrap">
@@ -142,6 +143,51 @@
       <button class="btn btn-ghost btn-sm" id="adjModalDelete" style="margin-right:auto;color:var(--danger)">Korrektur löschen</button>
       <button class="btn btn-secondary" id="adjModalCancel">Abbrechen</button>
       <button class="btn btn-primary"   id="adjModalSave">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Project Booking Modal -->
+<div id="bookingModal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <h3 id="bookingModalTitle">Projektbuchung</h3>
+      <button class="modal-close" id="bookingModalClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field-row">
+        <div class="field">
+          <label for="bookingAmount">Betrag (€)</label>
+          <input type="number" id="bookingAmount" min="0" step="1" placeholder="z.B. 1000">
+        </div>
+        <div class="field">
+          <label for="bookingRate">Stundensatz</label>
+          <select id="bookingRate">
+            <option value="100">100 €/h</option>
+            <option value="120">120 €/h</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="bookingStart">Startmonat</label>
+          <input type="month" id="bookingStart">
+        </div>
+        <div class="field">
+          <label for="bookingMonths">Dauer (Monate)</label>
+          <input type="number" id="bookingMonths" min="1" step="1" value="1" placeholder="1">
+        </div>
+      </div>
+      <div id="bookingCalc" style="font-size:13px;color:var(--primary);font-weight:500;padding:8px 0;min-height:22px"></div>
+      <div class="field">
+        <label for="bookingNote">Notiz <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
+        <input type="text" id="bookingNote" placeholder="z.B. SEO-Sprint Q3">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" id="bookingModalDelete" style="margin-right:auto;color:var(--danger);display:none">Löschen</button>
+      <button class="btn btn-secondary" id="bookingModalCancel">Abbrechen</button>
+      <button class="btn btn-primary"   id="bookingModalSave">Speichern</button>
     </div>
   </div>
 </div>
