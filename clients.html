@@ -141,6 +141,28 @@
         </div>
         <input type="hidden" id="clientIsProject" value="0">
       </div>
+      <div id="budgetSwitchWrap" style="display:none;border-top:1px solid var(--border);padding-top:14px">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;font-weight:500;text-transform:uppercase;letter-spacing:.04em">Weiterführung als Retainer</div>
+        <div class="field-row" style="align-items:flex-end">
+          <div class="field">
+            <label for="clientBudgetSwitch">Ab Monat</label>
+            <input type="month" id="clientBudgetSwitch">
+            <span class="hint">Ab hier gilt das Retainer-Budget</span>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="clientAmBudget2">Budget AM (Retainer)</label>
+            <input type="number" id="clientAmBudget2" min="0" step="0.5" placeholder="z.B. 10">
+            <span class="hint">Stunden / Monat</span>
+          </div>
+          <div class="field">
+            <label for="clientAdvBudget2">Budget Advertising (Retainer)</label>
+            <input type="number" id="clientAdvBudget2" min="0" step="0.5" placeholder="z.B. 0">
+            <span class="hint">Stunden / Monat</span>
+          </div>
+        </div>
+      </div>
       <div class="field">
         <label for="clientLexofficeName">LexOffice Kontaktname <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
         <input type="text" id="clientLexofficeName" placeholder="z.B. Muster GmbH &amp; Co. KG" autocomplete="off">

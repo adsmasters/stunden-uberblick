@@ -232,11 +232,14 @@ create table if not exists util_hours (
 alter table util_hours disable row level security;
 
 
--- Projektkunden-Felder + Vertragsende
+-- Projektkunden-Felder + Vertragsende + Phasenwechsel
 alter table clients
   add column if not exists is_project    boolean not null default false,
   add column if not exists project_end   date,
-  add column if not exists contract_end  date;
+  add column if not exists contract_end  date,
+  add column if not exists budget_switch date,
+  add column if not exists am_budget2    numeric,
+  add column if not exists adv_budget2   numeric;
 
 -- Monatliche Korrekturen pro Kunde
 create table if not exists adjustments (
