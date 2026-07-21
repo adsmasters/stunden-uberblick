@@ -19,7 +19,19 @@
   var clientStartInput       = document.getElementById('clientStartInput');
   var clientContractEndInput = document.getElementById('clientContractEndInput');
   var clientIsProject        = document.getElementById('clientIsProject');
+  var typeRetainerBtn        = document.getElementById('typeRetainerBtn');
+  var typeProjectBtn         = document.getElementById('typeProjectBtn');
   var clientLexofficeName    = document.getElementById('clientLexofficeName');
+
+  function setClientType(isProject) {
+    clientIsProject.value = isProject ? '1' : '0';
+    typeRetainerBtn.style.background = !isProject ? 'var(--primary)' : '';
+    typeRetainerBtn.style.color      = !isProject ? '#fff'           : '';
+    typeProjectBtn.style.background  =  isProject ? 'var(--primary)' : '';
+    typeProjectBtn.style.color       =  isProject ? '#fff'           : '';
+  }
+  typeRetainerBtn.addEventListener('click', function () { setClientType(false); });
+  typeProjectBtn.addEventListener('click',  function () { setClientType(true); });
   var clientModalClose   = document.getElementById('clientModalClose');
   var clientModalCancel  = document.getElementById('clientModalCancel');
   var clientModalSave    = document.getElementById('clientModalSave');
@@ -109,7 +121,7 @@
     clientAdvEmpSelect.value = (client && client.adv_employee_id) || '';
     clientStartInput.value   = (client && client.contract_start)
       ? client.contract_start.substring(0, 7) : '';
-    clientIsProject.checked  = !!(client && client.is_project);
+    setClientType(!!(client && client.is_project));
     // Prefer contract_end; fall back to project_end for legacy data
     var endVal = (client && client.contract_end) ? client.contract_end
                : (client && client.project_end)  ? client.project_end : null;
@@ -136,7 +148,7 @@
     // Store as "YYYY-MM-01" date string (Postgres date column)
     var contractStart = clientStartInput.value ? clientStartInput.value + '-01' : null;
     var contractEnd   = clientContractEndInput.value ? clientContractEndInput.value + '-01' : null;
-    var isProject     = clientIsProject.checked;
+    var isProject     = clientIsProject.value === '1';
     var lexofficeName = clientLexofficeName.value.trim() || null;
 
     clientModalSave.disabled    = true;
