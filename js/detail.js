@@ -393,7 +393,7 @@
       if (advOver) overBadges.push('<span class="badge badge-over">Advertising</span>');
       var overHtml = isFuture
         ? '<span class="text-muted">–</span>'
-        : beforeContract
+        : phase === 'before'
           ? '<span class="text-muted" style="font-size:11px">vor Vertragsstart</span>'
           : phase === 'after'
           ? '<span class="text-muted" style="font-size:11px">Vertrag beendet</span>'
