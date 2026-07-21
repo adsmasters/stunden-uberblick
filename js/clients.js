@@ -21,6 +21,10 @@
   var clientIsProject        = document.getElementById('clientIsProject');
   var typeRetainerBtn        = document.getElementById('typeRetainerBtn');
   var typeProjectBtn         = document.getElementById('typeProjectBtn');
+  var budgetSwitchWrap       = document.getElementById('budgetSwitchWrap');
+  var clientBudgetSwitch     = document.getElementById('clientBudgetSwitch');
+  var clientAmBudget2        = document.getElementById('clientAmBudget2');
+  var clientAdvBudget2       = document.getElementById('clientAdvBudget2');
   var clientLexofficeName    = document.getElementById('clientLexofficeName');
 
   function setClientType(isProject) {
@@ -29,6 +33,12 @@
     typeRetainerBtn.style.color      = !isProject ? '#fff'           : '';
     typeProjectBtn.style.background  =  isProject ? 'var(--primary)' : '';
     typeProjectBtn.style.color       =  isProject ? '#fff'           : '';
+    budgetSwitchWrap.style.display   =  isProject ? ''               : 'none';
+    if (!isProject) {
+      clientBudgetSwitch.value = '';
+      clientAmBudget2.value    = '';
+      clientAdvBudget2.value   = '';
+    }
   }
   typeRetainerBtn.addEventListener('click', function () { setClientType(false); });
   typeProjectBtn.addEventListener('click',  function () { setClientType(true); });
@@ -126,7 +136,10 @@
     var endVal = (client && client.contract_end) ? client.contract_end
                : (client && client.project_end)  ? client.project_end : null;
     clientContractEndInput.value  = endVal ? endVal.substring(0, 7) : '';
-    clientLexofficeName.value     = (client && client.lexoffice_name) || '';
+    clientLexofficeName.value  = (client && client.lexoffice_name) || '';
+    clientBudgetSwitch.value   = (client && client.budget_switch) ? client.budget_switch.substring(0, 7) : '';
+    clientAmBudget2.value      = (client && client.am_budget2  != null) ? client.am_budget2  : '';
+    clientAdvBudget2.value     = (client && client.adv_budget2 != null) ? client.adv_budget2 : '';
     clientModal.classList.remove('hidden');
     clientNameInput.focus();
   }
@@ -150,6 +163,9 @@
     var contractEnd   = clientContractEndInput.value ? clientContractEndInput.value + '-01' : null;
     var isProject     = clientIsProject.value === '1';
     var lexofficeName = clientLexofficeName.value.trim() || null;
+    var budgetSwitch  = clientBudgetSwitch.value ? clientBudgetSwitch.value + '-01' : null;
+    var amBudget2     = budgetSwitch ? (parseFloat(clientAmBudget2.value)  || null) : null;
+    var advBudget2    = budgetSwitch ? (parseFloat(clientAdvBudget2.value) || null) : null;
 
     clientModalSave.disabled    = true;
     clientModalSave.textContent = 'Speichern…';
@@ -160,10 +176,13 @@
                    contract_end:   contractEnd,
                    is_project: isProject,
                    project_end: contractEnd,
-                   lexoffice_name: lexofficeName };
+                   lexoffice_name: lexofficeName,
+                   budget_switch: budgetSwitch,
+                   am_budget2:    amBudget2,
+                   adv_budget2:   advBudget2 };
     var promise = editingClientId
       ? window.db.clients.update(editingClientId, fields)
-      : window.db.clients.create(name, am, adv, amEmp, advEmp, contractStart, isProject, contractEnd, contractEnd, lexofficeName);
+      : window.db.clients.create(fields);
 
     promise.then(function () {
       closeClientModal();

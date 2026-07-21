@@ -149,25 +149,41 @@
     const todayM = today.getMonth() + 1;
     const todayD = today.getDate();
 
-    let amB = client.am_budget  != null ? 0 : null;
-    let advB = client.adv_budget != null ? 0 : null;
+    let amB  = (client.am_budget  != null || client.am_budget2  != null) ? 0 : null;
+    let advB = (client.adv_budget != null || client.adv_budget2 != null) ? 0 : null;
+
     for (let m = 1; m <= maxMonth; m++) {
-      const d = new Date(client.contract_start || '2000-01-01');
-      const csY = client.contract_start ? d.getUTCFullYear() : 0;
-      const csM = client.contract_start ? d.getUTCMonth() + 1 : 1;
-      if (csY > year || (csY === year && m < csM)) continue;
-      // contract_end applies to all clients; fall back to project_end for legacy data
-      const endDate = client.contract_end || (client.is_project ? client.project_end : null);
-      if (endDate) {
-        const ed  = new Date(endDate);
-        const edY = ed.getUTCFullYear(), edM = ed.getUTCMonth() + 1;
-        if (year > edY || (year === edY && m > edM)) continue;
+      // Contract start check
+      if (client.contract_start) {
+        const cs  = new Date(client.contract_start);
+        const csY = cs.getUTCFullYear(), csM = cs.getUTCMonth() + 1;
+        if (csY > year || (csY === year && m < csM)) continue;
       }
-      const adj    = adjs[m] || null;
+
+      // Determine phase for this month
+      let phase = 'phase1';
+      if (client.budget_switch) {
+        const bs  = new Date(client.budget_switch);
+        const bsY = bs.getUTCFullYear(), bsM = bs.getUTCMonth() + 1;
+        if (year > bsY || (year === bsY && m >= bsM)) phase = 'phase2';
+      }
+
+      // Skip months after contract end (only for non-transition clients)
+      if (phase === 'phase1' && !client.budget_switch) {
+        const endDate = client.contract_end || client.project_end || null;
+        if (endDate) {
+          const ed  = new Date(endDate);
+          const edY = ed.getUTCFullYear(), edM = ed.getUTCMonth() + 1;
+          if (year > edY || (year === edY && m > edM)) continue;
+        }
+      }
+
+      const adj     = adjs[m] || null;
       const adjAmH  = adj ? (adj.am_hours  || 0) : 0;
       const adjAdvH = adj ? (adj.adv_hours || 0) : 0;
+      const bdgAm   = phase === 'phase2' ? client.am_budget2  : client.am_budget;
+      const bdgAdv  = phase === 'phase2' ? client.adv_budget2 : client.adv_budget;
 
-      // Pro-rate current month by elapsed working days
       let ratio = 1;
       if (year === todayY && m === todayM) {
         const total   = totalWorkDays(year, m);
@@ -175,8 +191,8 @@
         ratio = total > 0 ? elapsed / total : 1;
       }
 
-      if (amB  != null) amB  += (client.am_budget  + adjAmH)  * ratio;
-      if (advB != null) advB += (client.adv_budget + adjAdvH) * ratio;
+      if (amB  != null && bdgAm  != null) amB  += (bdgAm  + adjAmH)  * ratio;
+      if (advB != null && bdgAdv != null) advB += (bdgAdv + adjAdvH) * ratio;
     }
     return { amB, advB };
   }
@@ -191,15 +207,17 @@
       if (csY > year) return 0;
       if (csY === year) startM = csM;
     }
-    // Determine end month for this year
+    // Determine end month for this year (transition clients run indefinitely)
     let endM = maxMonth;
-    const endDate2 = client.contract_end || (client.is_project ? client.project_end : null);
-    if (endDate2) {
-      const d   = new Date(endDate2);
-      const edY = d.getUTCFullYear();
-      const edM = d.getUTCMonth() + 1;
-      if (edY < year) return 0;
-      if (edY === year) endM = Math.min(maxMonth, edM);
+    if (!client.budget_switch) {
+      const endDate2 = client.contract_end || client.project_end || null;
+      if (endDate2) {
+        const d   = new Date(endDate2);
+        const edY = d.getUTCFullYear();
+        const edM = d.getUTCMonth() + 1;
+        if (edY < year) return 0;
+        if (edY === year) endM = Math.min(maxMonth, edM);
+      }
     }
     return Math.max(0, endM - startM + 1);
   }

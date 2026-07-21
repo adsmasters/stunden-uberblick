@@ -64,12 +64,29 @@
     return year < cs.year || (year === cs.year && month < cs.month);
   }
   function isAfterContract(year, month, client) {
+    if (client.budget_switch) return false; // transition client – never fully "after"
     var endDate = client.contract_end || client.project_end || null;
     if (!endDate) return false;
-    var d   = new Date(endDate);
+    var d    = new Date(endDate);
     var endY = d.getUTCFullYear();
     var endM = d.getUTCMonth() + 1;
     return year > endY || (year === endY && month > endM);
+  }
+
+  function getPhase(year, month, client) {
+    if (isBeforeContract(year, month, client)) return 'before';
+    if (client.budget_switch) {
+      var d   = new Date(client.budget_switch);
+      var swY = d.getUTCFullYear(), swM = d.getUTCMonth() + 1;
+      if (year > swY || (year === swY && month >= swM)) return 'phase2';
+    }
+    if (isAfterContract(year, month, client)) return 'after';
+    return 'phase1';
+  }
+
+  function budgetForPhase(client, phase) {
+    if (phase === 'phase2') return { am: client.am_budget2, adv: client.adv_budget2 };
+    return { am: client.am_budget, adv: client.adv_budget };
   }
   var modalState     = null; // { year, month }
   var adjState       = null; // { year, month, existing: adj|null }
@@ -174,14 +191,13 @@
       var adjAm  = adj ? (adj.am_hours  || 0) : 0;
       var adjAdv = adj ? (adj.adv_hours || 0) : 0;
 
-      // No budget comparison for months outside contract/project period
-      var beforeContract = isBeforeContract(year, month, client);
-      var afterProject   = isAfterContract(year, month, client);
-      var outOfPeriod    = beforeContract || afterProject;
+      var phase       = getPhase(year, month, client);
+      var outOfPeriod = phase === 'before' || phase === 'after';
+      var bdg         = budgetForPhase(client, phase);
 
       // Effective budget = monthly budget ± correction
-      var effAmBudget  = (!outOfPeriod && client.am_budget  != null) ? client.am_budget  + adjAm  : null;
-      var effAdvBudget = (!outOfPeriod && client.adv_budget != null) ? client.adv_budget + adjAdv : null;
+      var effAmBudget  = (!outOfPeriod && bdg.am  != null) ? bdg.am  + adjAm  : null;
+      var effAdvBudget = (!outOfPeriod && bdg.adv != null) ? bdg.adv + adjAdv : null;
 
       var amDiff  = effAmBudget  != null ? amTotal - effAmBudget  : null;
       var advDiff = effAdvBudget != null ? advH    - effAdvBudget : null;
@@ -190,8 +206,8 @@
       var amOk    = amDiff  != null && amDiff  <= 0.05;
       var advOk   = advDiff != null && advDiff <= 0.05;
 
-      var hasBudget = !outOfPeriod && (client.am_budget != null || client.adv_budget != null);
-      var totalBdg  = (client.am_budget || 0) + (client.adv_budget || 0);
+      var hasBudget = !outOfPeriod && (bdg.am != null || bdg.adv != null);
+      var totalBdg  = (bdg.am || 0) + (bdg.adv || 0);
       var totalDiff = hasBudget ? total - totalBdg : null;
 
       var overBadges = [];
@@ -201,7 +217,7 @@
         ? '<span class="text-muted">–</span>'
         : beforeContract
           ? '<span class="text-muted" style="font-size:11px">vor Vertragsstart</span>'
-          : afterProject
+          : phase === 'after'
           ? '<span class="text-muted" style="font-size:11px">Vertrag beendet</span>'
           : overBadges.length
             ? '<div class="over-badges">' + overBadges.join('') + '</div>'
@@ -353,22 +369,21 @@
   function renderSummary(entriesByMonth, adjByMonth, year, client) {
     var ym = window.currentYearMonth();
     var totAm = 0, totAdv = 0, months = 0;
-    var yearAmB  = client.am_budget  != null ? 0 : null;
-    var yearAdvB = client.adv_budget != null ? 0 : null;
+    var yearAmB  = (client.am_budget  != null || client.am_budget2  != null) ? 0 : null;
+    var yearAdvB = (client.adv_budget != null || client.adv_budget2 != null) ? 0 : null;
     for (var m = 1; m <= 12; m++) {
       if (year > ym.year || (year === ym.year && m > ym.month)) continue;
-      if (isBeforeContract(year, m, client)) continue;
-      if (isAfterContract(year, m, client))  continue;
+      var ph = getPhase(year, m, client);
+      if (ph === 'before' || ph === 'after') continue;
       var agg = window.aggregateEntries(entriesByMonth[m] || []);
       var adj = adjByMonth[m] || null;
       var adjAmH  = adj ? (adj.am_hours  || 0) : 0;
       var adjAdvH = adj ? (adj.adv_hours || 0) : 0;
-      // Tracked hours unchanged
+      var bdgM = budgetForPhase(client, ph);
       totAm  += agg.amTotal;
       totAdv += agg.advH;
-      // Budget accumulates per month with corrections
-      if (yearAmB  != null) yearAmB  += client.am_budget  + adjAmH;
-      if (yearAdvB != null) yearAdvB += client.adv_budget + adjAdvH;
+      if (yearAmB  != null && bdgM.am  != null) yearAmB  += bdgM.am  + adjAmH;
+      if (yearAdvB != null && bdgM.adv != null) yearAdvB += bdgM.adv + adjAdvH;
       months++;
     }
     var total    = totAm + totAdv;

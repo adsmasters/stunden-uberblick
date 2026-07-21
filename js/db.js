@@ -65,15 +65,8 @@
           .order('name')),
       get: (id) =>
         q(s => s.from('clients').select('*').eq('id', id).single()),
-      create: (name, amBudget, advBudget, amEmpId, advEmpId, contractStart, isProject, projectEnd, contractEnd, lexofficeName) =>
-        q(s => s.from('clients')
-          .insert({ name, am_budget: amBudget || null, adv_budget: advBudget || null,
-                    am_employee_id: amEmpId || null, adv_employee_id: advEmpId || null,
-                    contract_start: contractStart || null,
-                    contract_end:   contractEnd   || null,
-                    is_project: !!isProject, project_end: projectEnd || null,
-                    lexoffice_name: lexofficeName || null })
-          .select().single()),
+      create: (fields) =>
+        q(s => s.from('clients').insert(fields).select().single()),
       update: (id, fields) =>
         q(s => s.from('clients').update(fields).eq('id', id).select().single()),
       delete: (id) =>
