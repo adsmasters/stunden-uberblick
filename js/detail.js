@@ -356,7 +356,7 @@
       var isFuture = year > ym.year || (year === ym.year && month > ym.month);
       var isCurrent= year === ym.year && month === ym.month;
       var monthEntries = entriesByMonth[month] || [];
-      var agg = window.aggregateEntries(monthEntries);
+      var agg = window.aggregateEntries(monthEntries, year, month);
       var adj = adjByMonth[month] || null;
 
       // Tracked hours + project bookings
@@ -491,14 +491,15 @@
         var amItems = agg.breakdown.filter(function (b) {
           return b.role === 'account_manager' || b.role === 'freelancer';
         });
+        var flDiv = window.flDivisor(year, month);
         var amBreakdownHtml = amItems.map(function (b) {
           var isFL    = b.role === 'freelancer';
-          var counted = isFL ? b.hours / 3 : b.hours;
+          var counted = b.counted != null ? b.counted : b.hours;
           return '<span class="am-breakdown-item">' +
             '<span class="am-tag ' + window.getRoleCls(b.role) + '">' + window.getRoleShort(b.role) + '</span>' +
             '<span class="emp-hours">' + window.fmtHours(b.hours) + '</span>' +
             '<span>' + b.name + '</span>' +
-            (isFL ? '<span class="fl-divider">÷3 = ' + window.fmtHours(counted) + '</span>' : '') +
+            (isFL ? '<span class="fl-divider">÷' + flDiv + ' = ' + window.fmtHours(counted) + '</span>' : '') +
           '</span>';
         }).join('');
 
@@ -556,7 +557,7 @@
       if (year > ym.year || (year === ym.year && m > ym.month)) continue;
       var ph = getPhase(year, m, client);
       if (ph === 'before' || ph === 'after') continue;
-      var agg = window.aggregateEntries(entriesByMonth[m] || []);
+      var agg = window.aggregateEntries(entriesByMonth[m] || [], year, m);
       var adj = adjByMonth[m] || null;
       var adjAmH  = adj ? (adj.am_hours  || 0) : 0;
       var adjAdvH = adj ? (adj.adv_hours || 0) : 0;
@@ -675,19 +676,21 @@
       else if (role === 'freelancer')      flH  += h;
     });
 
+    var flDiv = window.flDivisor(modalState ? modalState.year : 0, modalState ? modalState.month : 0);
+
     modalRows.querySelectorAll('.emp-hours-input[data-role="freelancer"]').forEach(function (inp) {
       var calcEl = inp.closest('.entry-row') && inp.closest('.entry-row').querySelector('.fl-calc');
       if (calcEl) {
-        var fl3 = (parseFloat(inp.value) || 0) / 3;
-        calcEl.textContent = fl3 > 0 ? '(÷3 = ' + window.fmtHours(fl3) + ')' : '';
+        var flC = (parseFloat(inp.value) || 0) / flDiv;
+        calcEl.textContent = flC > 0 ? '(÷' + flDiv + ' = ' + window.fmtHours(flC) + ')' : '';
       }
     });
 
-    var amTotal = amH + flH / 3;
+    var amTotal = amH + flH / flDiv;
     modalTotals.classList.remove('hidden');
     modalTotals.innerHTML =
       '<strong>Account Mgmt:</strong> ' + window.fmtHours(amTotal) +
-      (flH > 0 ? ' <span style="font-size:11.5px;color:var(--text-muted)">(' + window.fmtHours(amH) + ' AM + ' + window.fmtHours(flH) + ' FL÷3 = ' + window.fmtHours(flH / 3) + ')</span>' : '') +
+      (flH > 0 ? ' <span style="font-size:11.5px;color:var(--text-muted)">(' + window.fmtHours(amH) + ' AM + ' + window.fmtHours(flH) + ' FL÷' + flDiv + ' = ' + window.fmtHours(flH / flDiv) + ')</span>' : '') +
       '&emsp;<strong>Advertising:</strong> ' + window.fmtHours(advH);
   }
 

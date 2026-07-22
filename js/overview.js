@@ -482,12 +482,13 @@
         const amItems = breakdown.filter(b => b.role === 'account_manager' || b.role === 'freelancer');
         const amBreakdown = amItems.map(b => {
           const isFL    = b.role === 'freelancer';
-          const counted = isFL ? b.hours / 3 : b.hours;
+          const counted = b.counted != null ? b.counted : b.hours;
+          const div     = isFL ? (counted > 0 ? Math.round(b.hours / counted) : '?') : null;
           return `<span class="am-breakdown-item">
             <span class="am-tag ${window.getRoleCls(b.role)}">${window.getRoleShort(b.role)}</span>
             <span class="emp-hours">${window.fmtHours(b.hours)}</span>
             <span>${b.name}</span>
-            ${isFL ? `<span class="fl-divider">÷3 = ${window.fmtHours(counted)}</span>` : ''}
+            ${isFL ? `<span class="fl-divider">÷${div} = ${window.fmtHours(counted)}</span>` : ''}
           </span>`;
         }).join('');
 

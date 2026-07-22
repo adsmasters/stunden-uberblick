@@ -17,24 +17,37 @@
   window.getRoleShort = (role) => window.ROLES[role]?.short || role;
   window.getRoleCls   = (role) => window.ROLES[role]?.cls   || '';
 
-  // Aggregate per-employee entries → { amH, advH, flH, amTotal, breakdown }
-  window.aggregateEntries = function (entries) {
-    let amH = 0, advH = 0, flH = 0;
+  // FL divisor: ÷3 before Jul 2026, ÷2 from Jul 2026 onwards
+  window.flDivisor = function (year, month) {
+    if (!year || !month) return 3;
+    return (year > 2026 || (year === 2026 && month >= 7)) ? 2 : 3;
+  };
+
+  // Aggregate per-employee entries → { amH, advH, flH, flCounted, amTotal, breakdown }
+  // Passes year+month per entry so FL divisor is applied correctly per month.
+  window.aggregateEntries = function (entries, year, month) {
+    let amH = 0, advH = 0, flH = 0, flCounted = 0;
     const breakdown = [];
     (entries || []).forEach(e => {
       const role  = e.employees?.role;
       const hours = e.hours || 0;
+      const y = e.year  || year;
+      const m = e.month || month;
       if      (role === 'account_manager') amH  += hours;
       else if (role === 'advertising')     advH += hours;
-      else if (role === 'freelancer')      flH  += hours;
+      else if (role === 'freelancer') {
+        flH      += hours;
+        flCounted += hours / window.flDivisor(y, m);
+      }
       breakdown.push({
         employeeId: e.employee_id,
-        name:  e.employees?.name || '?',
+        name:    e.employees?.name || '?',
         role,
         hours,
+        counted: role === 'freelancer' ? hours / window.flDivisor(y, m) : hours,
       });
     });
-    return { amH, advH, flH, amTotal: amH + flH / 3, breakdown };
+    return { amH, advH, flH, flCounted, amTotal: amH + flCounted, breakdown };
   };
 
   window.parseHours = function (input) {

@@ -29,7 +29,7 @@
   const ROLE_HINTS = {
     account_manager: 'Stunden werden 1:1 zu Account Management gezählt.',
     advertising:     'Stunden werden zu Advertising gezählt.',
-    freelancer:      'Stunden werden durch 3 geteilt und zu Account Management gezählt.',
+    freelancer:      'Stunden werden durch 3 (bis Jun 2026) bzw. durch 2 (ab Jul 2026) geteilt und zu Account Management gezählt.',
     other:           'Stunden werden nicht in die Auswertung einbezogen.',
   };
 
