@@ -384,8 +384,8 @@
       var amOk    = amDiff  != null && amDiff  <= 0.05;
       var advOk   = advDiff != null && advDiff <= 0.05;
 
-      var hasBudget = !outOfPeriod && (bdg.am != null || bdg.adv != null);
-      var totalBdg  = (bdg.am || 0) + (bdg.adv || 0);
+      var hasBudget = !outOfPeriod && (effAmBudget != null || effAdvBudget != null);
+      var totalBdg  = (effAmBudget || 0) + (effAdvBudget || 0);
       var totalDiff = hasBudget ? total - totalBdg : null;
 
       var overBadges = [];
