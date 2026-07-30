@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bearbeiterübersicht – Stundenübersicht</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <a href="index.html" class="logo">Stunden<span>check</span></a>
+    <nav>
+      <a href="index.html"       class="nav-link">Übersicht</a>
+      <a href="clients.html"     class="nav-link">Kunden</a>
+      <a href="employees.html"   class="nav-link">Mitarbeiter</a>
+      <a href="utilization.html" class="nav-link">Auslastung</a>
+      <a href="bearbeiter.html"  class="nav-link active">Bearbeiter</a>
+      <a href="settings.html"    class="nav-link">Einstellungen</a>
+    </nav>
+  </div>
+</header>
+
+<main class="main">
+
+  <div id="setupHint" class="hidden">
+    <div class="state-box">
+      <div class="icon">⚙️</div>
+      <h3>Einstellungen erforderlich</h3>
+      <p>Bitte zuerst die Supabase-Verbindung in den <a href="settings.html">Einstellungen</a> konfigurieren.</p>
+      <a href="settings.html" class="btn btn-primary" style="margin-top:4px">Zu den Einstellungen</a>
+    </div>
+  </div>
+
+  <div id="error"></div>
+
+  <div class="page-header">
+    <div>
+      <h1>Bearbeiterübersicht</h1>
+      <div class="sub">Geleistete und offene Stunden pro Bearbeiter für einen Monat</div>
+    </div>
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <div class="field" style="margin:0">
+        <label for="empSelect" style="font-size:12px;margin-bottom:4px;display:block;color:var(--text-secondary)">Bearbeiter</label>
+        <select id="empSelect" style="height:36px;padding:0 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:#fff;min-width:180px">
+          <option value="">— Bitte wählen —</option>
+        </select>
+      </div>
+      <div class="field" style="margin:0">
+        <label for="monthPick" style="font-size:12px;margin-bottom:4px;display:block;color:var(--text-secondary)">Monat</label>
+        <input type="month" id="monthPick" style="height:36px;padding:0 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:#fff">
+      </div>
+    </div>
+  </div>
+
+  <div id="loading" class="hidden"></div>
+
+  <div id="summary" class="hidden" style="margin-bottom:20px"></div>
+
+  <div id="emptyState" class="hidden">
+    <div class="state-box">
+      <div class="icon">🔍</div>
+      <h3>Keine Kunden gefunden</h3>
+      <p>Für diesen Bearbeiter wurden im gewählten Monat keine Kunden gefunden.<br>
+         Bitte prüfe, ob dem Bearbeiter Kunden zugewiesen sind.</p>
+    </div>
+  </div>
+
+  <div id="tableWrap" class="card hidden">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Kunde</th>
+          <th>Rolle</th>
+          <th class="num">Budget</th>
+          <th class="num">Geleistet</th>
+          <th class="num">Offen</th>
+          <th style="width:140px"></th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/db.js"></script>
+<script src="js/appsettings.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/bearbeiter.js?v=1"></script>
+<script defer src="https://adsmasters.github.io/hub/backlink.js"></script>
+</body>
+</html>
