@@ -66,6 +66,7 @@
       { name:'Tag der Arbeit',            date: new Date(year,4,1)  },
       { name:'Christi Himmelfahrt',       date: add(E,39)           },
       { name:'Pfingstmontag',             date: add(E,50)           },
+      { name:'Fronleichnam',              date: add(E,60)           },
       { name:'Tag der Deutschen Einheit', date: new Date(year,9,3)  },
       { name:'1. Weihnachtstag',          date: new Date(year,11,25)},
       { name:'2. Weihnachtstag',          date: new Date(year,11,26)},
