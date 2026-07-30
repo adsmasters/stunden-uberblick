@@ -13,10 +13,10 @@
     <a href="index.html" class="logo">Stunden<span>check</span></a>
     <nav>
       <a href="index.html"       class="nav-link">Übersicht</a>
+      <a href="bearbeiter.html"  class="nav-link active">Monatsansicht</a>
       <a href="clients.html"     class="nav-link">Kunden</a>
       <a href="employees.html"   class="nav-link">Mitarbeiter</a>
       <a href="utilization.html" class="nav-link">Auslastung</a>
-      <a href="bearbeiter.html"  class="nav-link active">Bearbeiter</a>
       <a href="settings.html"    class="nav-link">Einstellungen</a>
     </nav>
   </div>
@@ -49,7 +49,7 @@
       </div>
       <div class="field" style="margin:0">
         <label for="monthPick" style="font-size:12px;margin-bottom:4px;display:block;color:var(--text-secondary)">Monat</label>
-        <input type="month" id="monthPick" style="height:36px;padding:0 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:#fff">
+        <select id="monthPick" style="height:36px;padding:0 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:#fff;min-width:160px"></select>
       </div>
     </div>
   </div>
@@ -90,7 +90,7 @@
 <script src="js/appsettings.js"></script>
 <script src="js/utils.js"></script>
 <script src="js/auth.js"></script>
-<script src="js/bearbeiter.js?v=1"></script>
+<script src="js/bearbeiter.js?v=2"></script>
 <script defer src="https://adsmasters.github.io/hub/backlink.js"></script>
 </body>
 </html>
