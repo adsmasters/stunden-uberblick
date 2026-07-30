@@ -11,9 +11,20 @@
   var setupHint  = document.getElementById('setupHint');
   var emptyState = document.getElementById('emptyState');
 
-  // Default to current month
+  // Populate month dropdown (18 months back, 3 months forward)
   var ym = window.currentYearMonth();
-  monthPick.value = ym.year + '-' + String(ym.month).padStart(2, '0');
+  (function () {
+    var curIdx = ym.year * 12 + ym.month - 1;
+    for (var i = curIdx + 3; i >= curIdx - 17; i--) {
+      var y = Math.floor(i / 12);
+      var m = (i % 12) + 1;
+      var o = document.createElement('option');
+      o.value = y + '-' + String(m).padStart(2, '0');
+      o.textContent = window.MONTHS_DE[m - 1] + ' ' + y;
+      if (y === ym.year && m === ym.month) o.selected = true;
+      monthPick.appendChild(o);
+    }
+  })();
 
   // ── Phase helpers ─────────────────────────────────────────────────────
   function getPhase(year, month, client) {
@@ -93,7 +104,7 @@
   }
 
   empSelect.addEventListener('change', loadData);
-  monthPick.addEventListener('change', loadData);
+  monthPick.addEventListener('change',  loadData);
 
   // ── Load data ─────────────────────────────────────────────────────────
   function loadData() {
