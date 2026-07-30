@@ -237,12 +237,14 @@
   function renderSummary(totTracked, totBudget, totRemaining, hasBudget, year, month) {
     var monthName = window.MONTHS_DE[month - 1] + ' ' + year;
 
+    // overage = tracked - budget: positive = too many hours, negative = hours still open
     var remColor = '';
     var remText  = '—';
     if (totRemaining != null) {
-      remText  = (totRemaining > 0 ? '+' : '') + window.fmtHours(totRemaining);
-      remColor = totRemaining > 0.05 ? 'color:var(--success)' :
-                 totRemaining < -0.05 ? 'color:var(--danger)'  : 'color:var(--text-muted)';
+      var overage = -totRemaining;
+      remText  = (overage > 0 ? '+' : '') + window.fmtHours(overage);
+      remColor = overage > 0.05  ? 'color:var(--danger)'        :
+                 overage < -0.05 ? 'color:var(--success)'       : 'color:var(--text-muted)';
     }
 
     summaryEl.innerHTML =
@@ -263,13 +265,14 @@
     var roleCls   = r.role === 'am' ? 'role-am' : 'role-adv';
     var roleLabel = r.role === 'am' ? 'AM' : 'ADV';
 
-    // Remaining cell
+    // Remaining cell: overage = tracked - budget (+ = too many, - = still open)
     var remText  = '—';
     var remStyle = '';
     if (r.remaining != null && !r.outOfPeriod) {
-      remText  = (r.remaining > 0 ? '+' : '') + window.fmtHours(r.remaining);
-      remStyle = r.remaining > 0.05  ? 'color:var(--success);font-weight:600' :
-                 r.remaining < -0.05 ? 'color:var(--danger);font-weight:600'  : 'color:var(--text-muted)';
+      var overage = -r.remaining;
+      remText  = (overage > 0 ? '+' : '') + window.fmtHours(overage);
+      remStyle = overage > 0.05  ? 'color:var(--danger);font-weight:600'  :
+                 overage < -0.05 ? 'color:var(--success);font-weight:600' : 'color:var(--text-muted)';
     }
 
     // Progress bar
