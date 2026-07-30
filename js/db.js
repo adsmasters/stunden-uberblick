@@ -132,6 +132,8 @@
     projectBookings: {
       forClient: (clientId) =>
         q(s => s.from('project_bookings').select('*').eq('client_id', clientId).order('start_month')),
+      forClientIds: (ids) =>
+        ids.length ? q(s => s.from('project_bookings').select('*').in('client_id', ids)) : Promise.resolve([]),
       create: (fields) =>
         q(s => s.from('project_bookings').insert(fields).select().single()),
       update: (id, fields) =>
