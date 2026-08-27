@@ -264,7 +264,11 @@
     summaryEl.classList.remove('hidden');
 
     tbody.innerHTML = '';
-    rows.forEach(function (r) { tbody.appendChild(renderRow(r)); });
+    rows.forEach(function (r) {
+      var result = renderRow(r);
+      tbody.appendChild(result.main);
+      if (result.sub) tbody.appendChild(result.sub);
+    });
     tableWrap.classList.remove('hidden');
     emptyState.classList.add('hidden');
   }
@@ -328,7 +332,7 @@
       bookBadge = ' <span class="adj-badge">+' + window.fmtHours(r.bookingH) + ' Buchung</span>';
     }
 
-    // Budget cell: show effective budget; if support exists, add expand with breakdown
+    // Budget cell: chevron icon only to the left of the number, number stays right-aligned
     var budgetCell = '—';
     var bdgExpId   = 'bdg-exp-' + r.client.id;
     var bdgBtnId   = 'bdg-btn-' + r.client.id;
@@ -339,29 +343,13 @@
         (r.phase === 'before' ? 'Vor Laufzeit' : 'Nach Laufzeit') + '</span>';
     } else if (r.effectiveBudget != null) {
       if (hasSupport) {
-        // Build breakdown items: total budget row + one row per supporter
-        var bdgItems =
-          '<span class="am-breakdown-item" style="color:var(--text-muted)">' +
-            '<span class="am-tag ' + roleCls + '" style="font-size:10px">Ges.</span>' +
-            '<span class="emp-hours">' + window.fmtHours(r.monthBudget) + '</span>' +
-            '<span class="emp-name">Gesamtbudget</span>' +
-          '</span>';
-        Object.keys(r.supportByName).forEach(function (name) {
-          var h = r.supportByName[name];
-          if (h <= 0.01) return;
-          bdgItems +=
-            '<span class="am-breakdown-item" style="color:var(--danger)">' +
-              '<span class="am-tag ' + roleCls + '" style="font-size:10px">−</span>' +
-              '<span class="emp-hours">−' + window.fmtHours(h) + '</span>' +
-              '<span class="emp-name">' + escHtml(name) + '</span>' +
-            '</span>';
-        });
-
         budgetCell =
-          '<button class="expand-btn" id="' + bdgBtnId + '" style="font-weight:700">' +
-            window.svgChevron() + ' ' + window.fmtHours(r.effectiveBudget) +
-          '</button>' +
-          '<div id="' + bdgExpId + '" class="am-breakdown-col hidden">' + bdgItems + '</div>';
+          '<div style="display:flex;align-items:center;justify-content:flex-end;gap:4px">' +
+            '<button class="expand-btn" id="' + bdgBtnId + '" style="padding:1px 3px">' +
+              window.svgChevron() +
+            '</button>' +
+            '<span style="font-weight:700">' + window.fmtHours(r.effectiveBudget) + '</span>' +
+          '</div>';
       } else {
         budgetCell = '<span style="font-weight:700">' + window.fmtHours(r.effectiveBudget) + '</span>';
       }
@@ -378,18 +366,43 @@
         '<div class="util-bar-wrap">' + progressHtml + '</div>' +
       '</td>';
 
-    // Wire budget expand button
+    // Build support sub-row (like detail view – separate <tr>)
+    var subTr = null;
     if (hasSupport) {
+      var bdgItems =
+        '<span class="am-breakdown-item" style="color:var(--text-muted)">' +
+          '<span class="am-tag ' + roleCls + '">Ges.</span>' +
+          '<span class="emp-hours">' + window.fmtHours(r.monthBudget) + '</span>' +
+          '<span class="emp-name">Gesamtbudget</span>' +
+        '</span>';
+      Object.keys(r.supportByName).forEach(function (name) {
+        var h = r.supportByName[name];
+        if (h <= 0.01) return;
+        bdgItems +=
+          '<span class="am-breakdown-item" style="color:var(--danger)">' +
+            '<span class="am-tag ' + roleCls + '">−</span>' +
+            '<span class="emp-hours">−' + window.fmtHours(h) + '</span>' +
+            '<span class="emp-name">' + escHtml(name) + '</span>' +
+          '</span>';
+      });
+
+      subTr = document.createElement('tr');
+      subTr.id        = bdgExpId;
+      subTr.className = 'am-breakdown-row hidden';
+      subTr.innerHTML =
+        '<td></td><td></td>' +
+        '<td style="overflow:hidden"><div class="am-breakdown-inner am-breakdown-col">' + bdgItems + '</div></td>' +
+        '<td></td><td></td><td></td>';
+
       var bdgBtn = tr.querySelector('#' + bdgBtnId);
       if (bdgBtn) bdgBtn.addEventListener('click', function (ev) {
         ev.stopPropagation();
         var open = bdgBtn.classList.toggle('open');
-        var dest = document.getElementById(bdgExpId);
-        if (dest) dest.classList.toggle('hidden', !open);
+        if (subTr) subTr.classList.toggle('hidden', !open);
       });
     }
 
-    return tr;
+    return { main: tr, sub: subTr };
   }
 
   // ── Boot ──────────────────────────────────────────────────────────────
