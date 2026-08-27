@@ -218,21 +218,29 @@
         var h = b.counted != null ? b.counted : b.hours;
         supportByName[b.name] = (supportByName[b.name] || 0) + h;
       });
+      var totalSupportH = Object.keys(supportByName).reduce(function (s, n) {
+        return s + supportByName[n];
+      }, 0);
 
-      // Offen is based on total tracked (own + support) vs budget
-      var remaining = monthBudget != null ? monthBudget - totalTracked : null;
+      // Effective budget = total budget minus support hours already covered by others
+      var effectiveBudget = monthBudget != null ? monthBudget - totalSupportH : null;
+
+      // Offen = effective budget minus own hours
+      var remaining = effectiveBudget != null ? effectiveBudget - myHours : null;
 
       return {
-        client:        c,
-        role:          role,
-        outOfPeriod:   outOfPeriod,
-        phase:         phase,
-        myHours:       myHours,
-        totalTracked:  totalTracked,
-        supportByName: supportByName,
-        monthBudget:   monthBudget,
-        remaining:     remaining,
-        bookingH:      bookingH,
+        client:         c,
+        role:           role,
+        outOfPeriod:    outOfPeriod,
+        phase:          phase,
+        myHours:        myHours,
+        totalTracked:   totalTracked,
+        supportByName:  supportByName,
+        totalSupportH:  totalSupportH,
+        monthBudget:    monthBudget,
+        effectiveBudget: effectiveBudget,
+        remaining:      remaining,
+        bookingH:       bookingH,
       };
     });
 
@@ -242,13 +250,13 @@
       return a.client.name.localeCompare(b.client.name, 'de');
     });
 
-    // Summary totals (active clients only)
+    // Summary totals (active clients only) — budget uses effective budget (minus support)
     var totMyHours = 0, totBudget = 0, totRemaining = 0, hasBudget = false, hasRemaining = false;
     rows.forEach(function (r) {
       if (r.outOfPeriod) return;
       totMyHours += r.myHours;
-      if (r.monthBudget != null) { totBudget += r.monthBudget; hasBudget = true; }
-      if (r.remaining  != null) { totRemaining += r.remaining; hasRemaining = true; }
+      if (r.effectiveBudget != null) { totBudget += r.effectiveBudget; hasBudget = true; }
+      if (r.remaining       != null) { totRemaining += r.remaining;      hasRemaining = true; }
     });
     if (!hasRemaining) totRemaining = null;
 
@@ -302,10 +310,10 @@
                  overage < -0.05 ? 'color:var(--success);font-weight:600' : 'color:var(--text-muted)';
     }
 
-    // Progress bar (based on total tracked vs budget)
+    // Progress bar (own hours vs effective budget)
     var progressHtml = '';
-    if (r.monthBudget && r.monthBudget > 0 && !r.outOfPeriod) {
-      var pct     = Math.min(100, Math.round((r.totalTracked / r.monthBudget) * 100));
+    if (r.effectiveBudget && r.effectiveBudget > 0 && !r.outOfPeriod) {
+      var pct     = Math.min(100, Math.round((r.myHours / r.effectiveBudget) * 100));
       var fillCls = pct >= 100 ? 'high' : pct >= 80 ? 'medium' : 'low';
       progressHtml =
         '<div class="util-bar-track" style="width:100%">' +
@@ -320,25 +328,43 @@
       bookBadge = ' <span class="adj-badge">+' + window.fmtHours(r.bookingH) + ' Buchung</span>';
     }
 
-    // Support badges (other employees who also worked on this client)
-    var supportBadges = '';
-    if (!r.outOfPeriod) {
-      Object.keys(r.supportByName).forEach(function (name) {
-        var h = r.supportByName[name];
-        if (h > 0.01) {
-          supportBadges += ' <span class="adj-badge" title="Unterstützung von ' + escHtml(name) + '">' +
-            escHtml(name.split(' ')[0]) + ' −' + window.fmtHours(h) + '</span>';
-        }
-      });
-    }
-
-    // Budget cell
+    // Budget cell: show effective budget; if support exists, add expand with breakdown
     var budgetCell = '—';
+    var bdgExpId   = 'bdg-exp-' + r.client.id;
+    var bdgBtnId   = 'bdg-btn-' + r.client.id;
+    var hasSupport = !r.outOfPeriod && r.totalSupportH > 0.01;
+
     if (r.outOfPeriod) {
       budgetCell = '<span class="text-muted" style="font-size:12px">' +
         (r.phase === 'before' ? 'Vor Laufzeit' : 'Nach Laufzeit') + '</span>';
-    } else if (r.monthBudget != null) {
-      budgetCell = window.fmtHours(r.monthBudget);
+    } else if (r.effectiveBudget != null) {
+      if (hasSupport) {
+        // Build breakdown items: total budget row + one row per supporter
+        var bdgItems =
+          '<span class="am-breakdown-item" style="color:var(--text-muted)">' +
+            '<span class="am-tag ' + roleCls + '" style="font-size:10px">Ges.</span>' +
+            '<span class="emp-hours">' + window.fmtHours(r.monthBudget) + '</span>' +
+            '<span class="emp-name">Gesamtbudget</span>' +
+          '</span>';
+        Object.keys(r.supportByName).forEach(function (name) {
+          var h = r.supportByName[name];
+          if (h <= 0.01) return;
+          bdgItems +=
+            '<span class="am-breakdown-item" style="color:var(--danger)">' +
+              '<span class="am-tag ' + roleCls + '" style="font-size:10px">−</span>' +
+              '<span class="emp-hours">−' + window.fmtHours(h) + '</span>' +
+              '<span class="emp-name">' + escHtml(name) + '</span>' +
+            '</span>';
+        });
+
+        budgetCell =
+          '<button class="expand-btn" id="' + bdgBtnId + '" style="font-weight:700">' +
+            window.svgChevron() + ' ' + window.fmtHours(r.effectiveBudget) +
+          '</button>' +
+          '<div id="' + bdgExpId + '" class="am-breakdown-col hidden">' + bdgItems + '</div>';
+      } else {
+        budgetCell = '<span style="font-weight:700">' + window.fmtHours(r.effectiveBudget) + '</span>';
+      }
     }
 
     tr.innerHTML =
@@ -346,11 +372,22 @@
         escHtml(r.client.name) + '</a></td>' +
       '<td><span class="role-badge ' + roleCls + '">' + roleLabel + '</span></td>' +
       '<td class="num">' + budgetCell + '</td>' +
-      '<td class="num">' + (r.outOfPeriod ? '—' : window.fmtHours(r.myHours) + bookBadge + supportBadges) + '</td>' +
+      '<td class="num">' + (r.outOfPeriod ? '—' : window.fmtHours(r.myHours) + bookBadge) + '</td>' +
       '<td class="num" style="' + remStyle + '">' + remText + '</td>' +
       '<td class="util-bar-cell" style="padding:8px 10px">' +
         '<div class="util-bar-wrap">' + progressHtml + '</div>' +
       '</td>';
+
+    // Wire budget expand button
+    if (hasSupport) {
+      var bdgBtn = tr.querySelector('#' + bdgBtnId);
+      if (bdgBtn) bdgBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var open = bdgBtn.classList.toggle('open');
+        var dest = document.getElementById(bdgExpId);
+        if (dest) dest.classList.toggle('hidden', !open);
+      });
+    }
 
     return tr;
   }
