@@ -344,14 +344,11 @@
     } else if (r.effectiveBudget != null) {
       if (hasSupport) {
         budgetCell =
-          '<div style="display:flex;align-items:center;justify-content:flex-end;gap:4px">' +
-            '<button class="expand-btn" id="' + bdgBtnId + '" style="padding:1px 3px">' +
-              window.svgChevron() +
-            '</button>' +
-            '<span style="font-weight:700">' + window.fmtHours(r.effectiveBudget) + '</span>' +
-          '</div>';
+          '<button class="expand-btn" id="' + bdgBtnId + '">' +
+            window.svgChevron() + ' ' + window.fmtHours(r.effectiveBudget) +
+          '</button>';
       } else {
-        budgetCell = '<span style="font-weight:700">' + window.fmtHours(r.effectiveBudget) + '</span>';
+        budgetCell = window.fmtHours(r.effectiveBudget);
       }
     }
 
@@ -369,12 +366,7 @@
     // Build support sub-row (like detail view – separate <tr>)
     var subTr = null;
     if (hasSupport) {
-      var bdgItems =
-        '<span class="am-breakdown-item" style="color:var(--text-muted)">' +
-          '<span class="am-tag ' + roleCls + '">Ges.</span>' +
-          '<span class="emp-hours">' + window.fmtHours(r.monthBudget) + '</span>' +
-          '<span class="emp-name">Gesamtbudget</span>' +
-        '</span>';
+      var bdgItems = '';
       Object.keys(r.supportByName).forEach(function (name) {
         var h = r.supportByName[name];
         if (h <= 0.01) return;
