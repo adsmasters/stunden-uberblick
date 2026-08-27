@@ -431,59 +431,11 @@
       var showAMExpand  = !isFuture && (hasAMData || bookingH > 0);
       var showADVExpand = !isFuture && hasADVData;
 
-      // Build AM breakdown HTML (inline inside cell, no separate row)
-      var amBreakdownDiv = '';
-      if (showAMExpand) {
-        var flDiv = window.flDivisor(year, month);
-        var amItems = agg.breakdown.filter(function (b) {
-          return b.role === 'account_manager' || b.role === 'freelancer';
-        });
-        var amBreakdownHtml = amItems.map(function (b) {
-          var isFL    = b.role === 'freelancer';
-          var counted = b.counted != null ? b.counted : b.hours;
-          var nameStr = b.name + (isFL ? ' <span class="fl-divider">÷' + flDiv + ' = ' + window.fmtHours(counted) + '</span>' : '');
-          return '<span class="am-breakdown-item">' +
-            '<span class="am-tag ' + window.getRoleCls(b.role) + '">' + window.getRoleShort(b.role) + '</span>' +
-            '<span class="emp-hours">' + window.fmtHours(b.hours) + '</span>' +
-            '<span class="emp-name">' + nameStr + '</span>' +
-          '</span>';
-        }).join('');
-        if (adjAm !== 0) {
-          amBreakdownHtml +=
-            '<span class="am-breakdown-item" style="color:var(--primary)">' +
-              '<span class="am-tag role-am">Korr.</span>' +
-              '<span class="emp-hours">' + (adjAm > 0 ? '+' : '') + window.fmtHours(adjAm) + '</span>' +
-              '<span class="emp-name">' + (adj && adj.note ? adj.note : '') + '</span>' +
-            '</span>';
-        }
-        amBreakdownDiv = '<div id="' + expandId + '" class="am-breakdown-col hidden">' + amBreakdownHtml + '</div>';
-      }
-
-      // Build ADV breakdown HTML (inline inside cell, no separate row)
+      // ADV badge (needed before advCellContent)
       var adjAdvBadge = (!isFuture && adjAdv !== 0)
         ? ' <span class="adj-badge" title="' + (adj && adj.note ? adj.note : 'Budgetkorrektur') + '">'
           + 'Budget ' + (adjAdv > 0 ? '+' : '') + window.fmtHours(adjAdv) + '</span>'
         : '';
-      var advBreakdownDiv = '';
-      if (showADVExpand) {
-        var advItems = agg.breakdown.filter(function (b) { return b.role === 'advertising'; });
-        var advBreakdownHtml = advItems.map(function (b) {
-          return '<span class="am-breakdown-item">' +
-            '<span class="am-tag ' + window.getRoleCls(b.role) + '">' + window.getRoleShort(b.role) + '</span>' +
-            '<span class="emp-hours">' + window.fmtHours(b.hours) + '</span>' +
-            '<span class="emp-name">' + b.name + '</span>' +
-          '</span>';
-        }).join('');
-        if (adjAdv !== 0) {
-          advBreakdownHtml +=
-            '<span class="am-breakdown-item" style="color:var(--primary)">' +
-              '<span class="am-tag role-adv">Korr.</span>' +
-              '<span class="emp-hours">' + (adjAdv > 0 ? '+' : '') + window.fmtHours(adjAdv) + '</span>' +
-              '<span class="emp-name">' + (adj && adj.note ? adj.note : '') + '</span>' +
-            '</span>';
-        }
-        advBreakdownDiv = '<div id="' + advExpandId + '" class="am-breakdown-col hidden">' + advBreakdownHtml + '</div>';
-      }
 
       var amCellContent;
       if (isFuture) {
@@ -493,8 +445,7 @@
           '<button class="expand-btn" id="' + btnId + '">' +
             window.svgChevron() + ' ' + window.fmtHours(amTotal) +
           '</button>' + adjAmBadge + bookingBadge +
-          (amDiff != null ? '<div style="font-size:11.5px">' + window.fmtDiff(amDiff).text + '</div>' : '') +
-          amBreakdownDiv;
+          (amDiff != null ? '<div style="font-size:11.5px">' + window.fmtDiff(amDiff).text + '</div>' : '');
       } else {
         amCellContent =
           '<div class="cell-hours"><span class="h-main">' + window.fmtHours(amTotal) + '</span>' + adjAmBadge + bookingBadge +
@@ -509,8 +460,7 @@
           '<button class="expand-btn" id="' + advBtnId + '">' +
             window.svgChevron() + ' ' + window.fmtHours(advH) +
           '</button>' + adjAdvBadge +
-          (advDiff != null ? '<div style="font-size:11.5px">' + window.fmtDiff(advDiff).text + '</div>' : '') +
-          advBreakdownDiv;
+          (advDiff != null ? '<div style="font-size:11.5px">' + window.fmtDiff(advDiff).text + '</div>' : '');
       } else {
         advCellContent =
           '<div class="cell-hours"><span class="h-main">' + window.fmtHours(advH) + '</span>' + adjAdvBadge +
@@ -552,8 +502,38 @@
 
       tbody.appendChild(tr);
 
-      // Wire AM expand button (breakdown is now inside the cell)
+      // AM breakdown sub-row
       if (showAMExpand) {
+        var flDiv = window.flDivisor(year, month);
+        var amItems = agg.breakdown.filter(function (b) {
+          return b.role === 'account_manager' || b.role === 'freelancer';
+        });
+        var amBreakdownHtml = amItems.map(function (b) {
+          var isFL    = b.role === 'freelancer';
+          var counted = b.counted != null ? b.counted : b.hours;
+          var nameStr = b.name + (isFL ? ' <span class="fl-divider">÷' + flDiv + ' = ' + window.fmtHours(counted) + '</span>' : '');
+          return '<span class="am-breakdown-item">' +
+            '<span class="am-tag ' + window.getRoleCls(b.role) + '">' + window.getRoleShort(b.role) + '</span>' +
+            '<span class="emp-hours">' + window.fmtHours(b.hours) + '</span>' +
+            '<span class="emp-name">' + nameStr + '</span>' +
+          '</span>';
+        }).join('');
+        if (adjAm !== 0) {
+          amBreakdownHtml +=
+            '<span class="am-breakdown-item" style="color:var(--primary)">' +
+              '<span class="am-tag role-am">Korr.</span>' +
+              '<span class="emp-hours">' + (adjAm > 0 ? '+' : '') + window.fmtHours(adjAm) + '</span>' +
+              '<span class="emp-name">' + (adj && adj.note ? adj.note : '') + '</span>' +
+            '</span>';
+        }
+        var amExpandTr = document.createElement('tr');
+        amExpandTr.id        = expandId;
+        amExpandTr.className = 'am-breakdown-row hidden';
+        amExpandTr.innerHTML =
+          '<td></td>' +
+          '<td class="right" style="overflow:hidden"><div class="am-breakdown-inner am-breakdown-col">' + amBreakdownHtml + '</div></td>' +
+          '<td></td><td></td><td></td><td></td>';
+        tbody.appendChild(amExpandTr);
         (function (bId, eId) {
           var btn = tr.querySelector('#' + bId);
           if (btn) btn.addEventListener('click', function (ev) {
@@ -565,8 +545,32 @@
         })(btnId, expandId);
       }
 
-      // Wire ADV expand button (breakdown is now inside the cell)
+      // ADV breakdown sub-row
       if (showADVExpand) {
+        var advItems = agg.breakdown.filter(function (b) { return b.role === 'advertising'; });
+        var advBreakdownHtml = advItems.map(function (b) {
+          return '<span class="am-breakdown-item">' +
+            '<span class="am-tag ' + window.getRoleCls(b.role) + '">' + window.getRoleShort(b.role) + '</span>' +
+            '<span class="emp-hours">' + window.fmtHours(b.hours) + '</span>' +
+            '<span class="emp-name">' + b.name + '</span>' +
+          '</span>';
+        }).join('');
+        if (adjAdv !== 0) {
+          advBreakdownHtml +=
+            '<span class="am-breakdown-item" style="color:var(--primary)">' +
+              '<span class="am-tag role-adv">Korr.</span>' +
+              '<span class="emp-hours">' + (adjAdv > 0 ? '+' : '') + window.fmtHours(adjAdv) + '</span>' +
+              '<span class="emp-name">' + (adj && adj.note ? adj.note : '') + '</span>' +
+            '</span>';
+        }
+        var advExpandTr = document.createElement('tr');
+        advExpandTr.id        = advExpandId;
+        advExpandTr.className = 'am-breakdown-row hidden';
+        advExpandTr.innerHTML =
+          '<td></td><td></td>' +
+          '<td class="right" style="overflow:hidden"><div class="am-breakdown-inner am-breakdown-col">' + advBreakdownHtml + '</div></td>' +
+          '<td></td><td></td><td></td>';
+        tbody.appendChild(advExpandTr);
         (function (bId, eId) {
           var btn = tr.querySelector('#' + bId);
           if (btn) btn.addEventListener('click', function (ev) {
