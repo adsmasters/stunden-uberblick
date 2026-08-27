@@ -511,11 +511,11 @@
         var amBreakdownHtml = amItems.map(function (b) {
           var isFL    = b.role === 'freelancer';
           var counted = b.counted != null ? b.counted : b.hours;
+          var nameStr = b.name + (isFL ? ' <span class="fl-divider">÷' + flDiv + ' = ' + window.fmtHours(counted) + '</span>' : '');
           return '<span class="am-breakdown-item">' +
             '<span class="am-tag ' + window.getRoleCls(b.role) + '">' + window.getRoleShort(b.role) + '</span>' +
             '<span class="emp-hours">' + window.fmtHours(b.hours) + '</span>' +
-            '<span class="emp-name">' + b.name + '</span>' +
-            (isFL ? '<span class="fl-divider" style="flex-shrink:0">÷' + flDiv + '=' + window.fmtHours(counted) + '</span>' : '') +
+            '<span class="emp-name">' + nameStr + '</span>' +
           '</span>';
         }).join('');
         if (adjAm !== 0) {
@@ -523,7 +523,7 @@
             '<span class="am-breakdown-item" style="color:var(--primary)">' +
               '<span class="am-tag role-am">Korr.</span>' +
               '<span class="emp-hours">' + (adjAm > 0 ? '+' : '') + window.fmtHours(adjAm) + '</span>' +
-              (adj && adj.note ? '<span>' + adj.note + '</span>' : '') +
+              '<span class="emp-name">' + (adj && adj.note ? adj.note : '') + '</span>' +
             '</span>';
         }
         var amExpandTr = document.createElement('tr');
@@ -560,7 +560,7 @@
             '<span class="am-breakdown-item" style="color:var(--primary)">' +
               '<span class="am-tag role-adv">Korr.</span>' +
               '<span class="emp-hours">' + (adjAdv > 0 ? '+' : '') + window.fmtHours(adjAdv) + '</span>' +
-              (adj && adj.note ? '<span>' + adj.note + '</span>' : '') +
+              '<span class="emp-name">' + (adj && adj.note ? adj.note : '') + '</span>' +
             '</span>';
         }
         var advExpandTr = document.createElement('tr');
