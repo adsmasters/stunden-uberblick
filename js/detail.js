@@ -514,8 +514,8 @@
           return '<span class="am-breakdown-item">' +
             '<span class="am-tag ' + window.getRoleCls(b.role) + '">' + window.getRoleShort(b.role) + '</span>' +
             '<span class="emp-hours">' + window.fmtHours(b.hours) + '</span>' +
-            '<span>' + b.name + '</span>' +
-            (isFL ? '<span class="fl-divider">÷' + flDiv + ' = ' + window.fmtHours(counted) + '</span>' : '') +
+            '<span class="emp-name">' + b.name + '</span>' +
+            (isFL ? '<span class="fl-divider" style="flex-shrink:0">÷' + flDiv + '=' + window.fmtHours(counted) + '</span>' : '') +
           '</span>';
         }).join('');
         if (adjAm !== 0) {
@@ -552,7 +552,7 @@
           return '<span class="am-breakdown-item">' +
             '<span class="am-tag ' + window.getRoleCls(b.role) + '">' + window.getRoleShort(b.role) + '</span>' +
             '<span class="emp-hours">' + window.fmtHours(b.hours) + '</span>' +
-            '<span>' + b.name + '</span>' +
+            '<span class="emp-name">' + b.name + '</span>' +
           '</span>';
         }).join('');
         if (adjAdv !== 0) {
