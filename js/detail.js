@@ -529,7 +529,10 @@
         var amExpandTr = document.createElement('tr');
         amExpandTr.id        = expandId;
         amExpandTr.className = 'am-breakdown-row hidden';
-        amExpandTr.innerHTML = '<td colspan="6"><div class="am-breakdown-inner">' + amBreakdownHtml + '</div></td>';
+        amExpandTr.innerHTML =
+          '<td></td>' +
+          '<td class="right"><div class="am-breakdown-inner am-breakdown-col">' + amBreakdownHtml + '</div></td>' +
+          '<td></td><td></td><td></td><td></td>';
         tbody.appendChild(amExpandTr);
         (function (bId, eId) {
           var btn = tr.querySelector('#' + bId);
@@ -563,7 +566,10 @@
         var advExpandTr = document.createElement('tr');
         advExpandTr.id        = advExpandId;
         advExpandTr.className = 'am-breakdown-row hidden';
-        advExpandTr.innerHTML = '<td colspan="6"><div class="am-breakdown-inner">' + advBreakdownHtml + '</div></td>';
+        advExpandTr.innerHTML =
+          '<td></td><td></td>' +
+          '<td class="right"><div class="am-breakdown-inner am-breakdown-col">' + advBreakdownHtml + '</div></td>' +
+          '<td></td><td></td><td></td>';
         tbody.appendChild(advExpandTr);
         (function (bId, eId) {
           var btn = tr.querySelector('#' + bId);
