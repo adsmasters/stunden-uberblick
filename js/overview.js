@@ -632,6 +632,8 @@
 
       syncBtn.textContent = `✓ ${matched} Einträge synchronisiert`;
       setTimeout(() => { syncBtn.textContent = 'Von Clockify sync'; }, 3000);
+      localStorage.setItem('clockifyLastAutoSync', Date.now().toString());
+      updateLastSyncLabel();
       loadData();
 
     } catch (e) {
@@ -658,4 +660,78 @@
   }
   loadBtn.addEventListener('click', loadData);
   syncBtn.addEventListener('click', syncFromClockify);
+
+  // ── Auto-sync: aktueller Monat zur vollen Stunde ──────────────────────
+  const autoSyncStatusEl = document.getElementById('autoSyncStatus');
+
+  function updateLastSyncLabel() {
+    const ts = localStorage.getItem('clockifyLastAutoSync');
+    if (!ts || !autoSyncStatusEl) return;
+    const d  = new Date(parseInt(ts, 10));
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    autoSyncStatusEl.textContent = '↻ ' + hh + ':' + mm + ' Uhr';
+  }
+
+  async function autoSyncCurrentMonth() {
+    if (!window.clockify.isConfigured() || !window.isConfigured()) return;
+    if (autoSyncStatusEl) autoSyncStatusEl.textContent = '↻ Sync…';
+    try {
+      const ym   = window.currentYearMonth();
+      const year = ym.year, month = ym.month;
+
+      const [clients, employees] = await Promise.all([
+        window.db.clients.list(),
+        window.db.employees.listActive(),
+      ]);
+      const clientMap = {}, employeeMap = {};
+      clients.forEach(c   => { clientMap[norm(c.name)]   = c; });
+      employees.forEach(e => { employeeMap[norm(e.name)] = e; });
+
+      const [cfMap, userMap, internMap] = await Promise.all([
+        window.clockify.fetchMonth(year, month),
+        window.clockify.fetchMonthByUser(year, month),
+        window.clockify.fetchMonthInternByUser(year, month),
+      ]);
+
+      const saves = [];
+      Object.keys(cfMap).forEach(clientKey => {
+        const client = clientMap[clientKey];
+        if (!client) return;
+        Object.keys(cfMap[clientKey]).forEach(userKey => {
+          const emp = employeeMap[userKey];
+          if (!emp) return;
+          saves.push(window.db.entries.upsert(client.id, emp.id, year, month, cfMap[clientKey][userKey]));
+        });
+      });
+      Object.keys(userMap).forEach(userKey => {
+        const emp = employeeMap[userKey];
+        if (!emp) return;
+        saves.push(window.db.utilHours.upsert(emp.id, year, month, userMap[userKey], internMap[userKey] || 0));
+      });
+      await Promise.all(saves);
+
+      localStorage.setItem('clockifyLastAutoSync', Date.now().toString());
+      loadData();
+    } catch (e) {
+      // Stiller Fehler beim Auto-Sync
+    }
+    updateLastSyncLabel();
+  }
+
+  function scheduleAutoSync() {
+    const now          = new Date();
+    const msToNextHour = (60 - now.getMinutes()) * 60000
+                       - now.getSeconds()        * 1000
+                       - now.getMilliseconds();
+    setTimeout(function () {
+      autoSyncCurrentMonth();
+      setInterval(autoSyncCurrentMonth, 60 * 60 * 1000);
+    }, msToNextHour);
+  }
+
+  if (window.clockify.isConfigured()) {
+    updateLastSyncLabel();
+    scheduleAutoSync();
+  }
 })();
