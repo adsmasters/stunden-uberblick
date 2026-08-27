@@ -156,7 +156,7 @@
           if (!bookingsByClient[b.client_id]) bookingsByClient[b.client_id] = [];
           bookingsByClient[b.client_id].push(b);
         });
-        render(empId, myClients, entriesByClient, adjByClient, bookingsByClient, year, month);
+        render(myClients, entriesByClient, adjByClient, bookingsByClient, year, month);
       });
     }).catch(function (e) {
       showError('Fehler: ' + e.message);
@@ -164,7 +164,7 @@
   }
 
   // ── Render ────────────────────────────────────────────────────────────
-  function render(empId, myClients, entriesByClient, adjByClient, bookingsByClient, year, month) {
+  function render(myClients, entriesByClient, adjByClient, bookingsByClient, year, month) {
     loadingEl.classList.add('hidden');
 
     if (!myClients.length) {
@@ -186,61 +186,24 @@
       var adjHours    = adj ? (role === 'am' ? (adj.am_hours || 0) : (adj.adv_hours || 0)) : 0;
       var monthBudget = rawBdg != null ? rawBdg + adjHours : null;
 
-      // All tracked hours for this client (all employees combined)
-      var clientEntries = entriesByClient[c.id] || [];
-      var agg           = window.aggregateEntries(clientEntries, year, month);
+      // Tracked hours
+      var clientEntries  = entriesByClient[c.id] || [];
+      var agg            = window.aggregateEntries(clientEntries, year, month);
       var clientBookings = bookingsByClient[c.id] || [];
       var bookingH       = bookingHoursForMonth(clientBookings, year, month);
-      var totalTracked   = role === 'am' ? agg.amTotal + bookingH : agg.advH;
+      var tracked        = role === 'am' ? agg.amTotal + bookingH : agg.advH;
 
-      // Own hours: only entries belonging to the selected employee
-      var myBreakdown = agg.breakdown.filter(function (b) {
-        if (b.employeeId !== empId) return false;
-        return role === 'am'
-          ? (b.role === 'account_manager' || b.role === 'freelancer')
-          : b.role === 'advertising';
-      });
-      var myHours = myBreakdown.reduce(function (s, b) {
-        return s + (b.counted != null ? b.counted : b.hours);
-      }, 0);
-      if (role === 'am') myHours += bookingH;
-
-      // Support hours: other employees who also worked on this client in the same role
-      var supportItems = agg.breakdown.filter(function (b) {
-        if (b.employeeId === empId) return false;
-        return role === 'am'
-          ? (b.role === 'account_manager' || b.role === 'freelancer')
-          : b.role === 'advertising';
-      });
-      // Aggregate support by employee name
-      var supportByName = {};
-      supportItems.forEach(function (b) {
-        var h = b.counted != null ? b.counted : b.hours;
-        supportByName[b.name] = (supportByName[b.name] || 0) + h;
-      });
-      var totalSupportH = Object.keys(supportByName).reduce(function (s, n) {
-        return s + supportByName[n];
-      }, 0);
-
-      // Effective budget = total budget minus support hours already covered by others
-      var effectiveBudget = monthBudget != null ? monthBudget - totalSupportH : null;
-
-      // Offen = effective budget minus own hours
-      var remaining = effectiveBudget != null ? effectiveBudget - myHours : null;
+      var remaining = monthBudget != null ? monthBudget - tracked : null;
 
       return {
-        client:         c,
-        role:           role,
-        outOfPeriod:    outOfPeriod,
-        phase:          phase,
-        myHours:        myHours,
-        totalTracked:   totalTracked,
-        supportByName:  supportByName,
-        totalSupportH:  totalSupportH,
-        monthBudget:    monthBudget,
-        effectiveBudget: effectiveBudget,
-        remaining:      remaining,
-        bookingH:       bookingH,
+        client:      c,
+        role:        role,
+        outOfPeriod: outOfPeriod,
+        phase:       phase,
+        tracked:     tracked,
+        monthBudget: monthBudget,
+        remaining:   remaining,
+        bookingH:    bookingH,
       };
     });
 
@@ -250,25 +213,20 @@
       return a.client.name.localeCompare(b.client.name, 'de');
     });
 
-    // Summary totals (active clients only) — budget uses effective budget (minus support)
-    var totMyHours = 0, totBudget = 0, totRemaining = 0, hasBudget = false, hasRemaining = false;
+    // Summary totals (active clients only)
+    var totTracked = 0, totBudget = 0, hasBudget = false;
     rows.forEach(function (r) {
       if (r.outOfPeriod) return;
-      totMyHours += r.myHours;
-      if (r.effectiveBudget != null) { totBudget += r.effectiveBudget; hasBudget = true; }
-      if (r.remaining       != null) { totRemaining += r.remaining;      hasRemaining = true; }
+      totTracked += r.tracked;
+      if (r.monthBudget != null) { totBudget += r.monthBudget; hasBudget = true; }
     });
-    if (!hasRemaining) totRemaining = null;
+    var totRemaining = hasBudget ? totBudget - totTracked : null;
 
-    renderSummary(totMyHours, totBudget, totRemaining, hasBudget, year, month);
+    renderSummary(totTracked, totBudget, totRemaining, hasBudget, year, month);
     summaryEl.classList.remove('hidden');
 
     tbody.innerHTML = '';
-    rows.forEach(function (r) {
-      var result = renderRow(r);
-      tbody.appendChild(result.main);
-      if (result.sub) tbody.appendChild(result.sub);
-    });
+    rows.forEach(function (r) { tbody.appendChild(renderRow(r)); });
     tableWrap.classList.remove('hidden');
     emptyState.classList.add('hidden');
   }
@@ -314,10 +272,10 @@
                  overage < -0.05 ? 'color:var(--success);font-weight:600' : 'color:var(--text-muted)';
     }
 
-    // Progress bar (own hours vs effective budget)
+    // Progress bar
     var progressHtml = '';
-    if (r.effectiveBudget && r.effectiveBudget > 0 && !r.outOfPeriod) {
-      var pct     = Math.min(100, Math.round((r.myHours / r.effectiveBudget) * 100));
+    if (r.monthBudget && r.monthBudget > 0 && !r.outOfPeriod) {
+      var pct     = Math.min(100, Math.round((r.tracked / r.monthBudget) * 100));
       var fillCls = pct >= 100 ? 'high' : pct >= 80 ? 'medium' : 'low';
       progressHtml =
         '<div class="util-bar-track" style="width:100%">' +
@@ -332,24 +290,13 @@
       bookBadge = ' <span class="adj-badge">+' + window.fmtHours(r.bookingH) + ' Buchung</span>';
     }
 
-    // Budget cell: chevron icon only to the left of the number, number stays right-aligned
+    // Budget cell
     var budgetCell = '—';
-    var bdgExpId   = 'bdg-exp-' + r.client.id;
-    var bdgBtnId   = 'bdg-btn-' + r.client.id;
-    var hasSupport = !r.outOfPeriod && r.totalSupportH > 0.01;
-
     if (r.outOfPeriod) {
       budgetCell = '<span class="text-muted" style="font-size:12px">' +
         (r.phase === 'before' ? 'Vor Laufzeit' : 'Nach Laufzeit') + '</span>';
-    } else if (r.effectiveBudget != null) {
-      if (hasSupport) {
-        budgetCell =
-          '<button class="expand-btn" id="' + bdgBtnId + '">' +
-            window.svgChevron() + ' ' + window.fmtHours(r.effectiveBudget) +
-          '</button>';
-      } else {
-        budgetCell = window.fmtHours(r.effectiveBudget);
-      }
+    } else if (r.monthBudget != null) {
+      budgetCell = window.fmtHours(r.monthBudget);
     }
 
     tr.innerHTML =
@@ -357,44 +304,13 @@
         escHtml(r.client.name) + '</a></td>' +
       '<td><span class="role-badge ' + roleCls + '">' + roleLabel + '</span></td>' +
       '<td class="num">' + budgetCell + '</td>' +
-      '<td class="num">' + (r.outOfPeriod ? '—' : window.fmtHours(r.myHours) + bookBadge) + '</td>' +
+      '<td class="num">' + (r.outOfPeriod ? '—' : window.fmtHours(r.tracked) + bookBadge) + '</td>' +
       '<td class="num" style="' + remStyle + '">' + remText + '</td>' +
       '<td class="util-bar-cell" style="padding:8px 10px">' +
         '<div class="util-bar-wrap">' + progressHtml + '</div>' +
       '</td>';
 
-    // Build support sub-row (like detail view – separate <tr>)
-    var subTr = null;
-    if (hasSupport) {
-      var bdgItems = '';
-      Object.keys(r.supportByName).forEach(function (name) {
-        var h = r.supportByName[name];
-        if (h <= 0.01) return;
-        bdgItems +=
-          '<span class="am-breakdown-item" style="color:var(--danger)">' +
-            '<span class="am-tag ' + roleCls + '">−</span>' +
-            '<span class="emp-hours">−' + window.fmtHours(h) + '</span>' +
-            '<span class="emp-name">' + escHtml(name) + '</span>' +
-          '</span>';
-      });
-
-      subTr = document.createElement('tr');
-      subTr.id        = bdgExpId;
-      subTr.className = 'am-breakdown-row hidden';
-      subTr.innerHTML =
-        '<td></td><td></td>' +
-        '<td style="overflow:hidden"><div class="am-breakdown-inner am-breakdown-col">' + bdgItems + '</div></td>' +
-        '<td></td><td></td><td></td>';
-
-      var bdgBtn = tr.querySelector('#' + bdgBtnId);
-      if (bdgBtn) bdgBtn.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        var open = bdgBtn.classList.toggle('open');
-        if (subTr) subTr.classList.toggle('hidden', !open);
-      });
-    }
-
-    return { main: tr, sub: subTr };
+    return tr;
   }
 
   // ── Boot ──────────────────────────────────────────────────────────────
