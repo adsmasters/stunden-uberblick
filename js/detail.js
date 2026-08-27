@@ -406,10 +406,12 @@
       var totalDiffStr = totalDiff != null
         ? '<div style="font-size:11.5px">' + window.fmtDiff(totalDiff).text + '</div>' : '';
 
-      var expandId  = 'am-expand-' + month;
-      var btnId     = 'am-btn-' + month;
-      var editBtnId = 'edit-btn-' + month;
-      var adjBtnId  = 'adj-btn-' + month;
+      var btnId       = 'am-btn-'   + month;
+      var advBtnId    = 'adv-btn-'  + month;
+      var expandId    = 'am-exp-'   + month;
+      var advExpandId = 'adv-exp-'  + month;
+      var editBtnId   = 'edit-btn-' + month;
+      var adjBtnId    = 'adj-btn-'  + month;
 
       var hasAMData = agg.breakdown.some(function (b) {
         return b.role === 'account_manager' || b.role === 'freelancer';
@@ -426,12 +428,15 @@
         ? ' <span class="adj-badge" title="Projektbuchung">+' + window.fmtHours(bookingH) + ' Buchung</span>'
         : '';
 
+      var showAMExpand  = !isFuture && (hasAMData || bookingH > 0);
+      var showADVExpand = !isFuture && hasADVData;
+
       var amCellContent;
       if (isFuture) {
         amCellContent = '<span class="text-muted">–</span>';
-      } else if (hasBreakdown) {
+      } else if (showAMExpand) {
         amCellContent =
-          '<button class="expand-btn" id="' + btnId + '" data-target="' + expandId + '">' +
+          '<button class="expand-btn" id="' + btnId + '">' +
             window.svgChevron() + ' ' + window.fmtHours(amTotal) +
           '</button>' + adjAmBadge + bookingBadge +
           (amDiff != null ? '<div style="font-size:11.5px">' + window.fmtDiff(amDiff).text + '</div>' : '');
@@ -447,10 +452,20 @@
           + 'Budget ' + (adjAdv > 0 ? '+' : '') + window.fmtHours(adjAdv) + '</span>'
         : '';
 
-      var advCellContent = isFuture
-        ? '<span class="text-muted">–</span>'
-        : '<div class="cell-hours"><span class="h-main">' + window.fmtHours(advH) + '</span>' + adjAdvBadge +
+      var advCellContent;
+      if (isFuture) {
+        advCellContent = '<span class="text-muted">–</span>';
+      } else if (showADVExpand) {
+        advCellContent =
+          '<button class="expand-btn" id="' + advBtnId + '">' +
+            window.svgChevron() + ' ' + window.fmtHours(advH) +
+          '</button>' + adjAdvBadge +
+          (advDiff != null ? '<div style="font-size:11.5px">' + window.fmtDiff(advDiff).text + '</div>' : '');
+      } else {
+        advCellContent =
+          '<div class="cell-hours"><span class="h-main">' + window.fmtHours(advH) + '</span>' + adjAdvBadge +
           (advDiff != null ? '<span class="h-diff">' + window.fmtDiff(advDiff).text + '</span>' : '') + '</div>';
+      }
 
       // Adjustment button – highlighted if correction exists
       var adjBtnStyle = adj ? 'color:var(--primary);font-weight:600' : '';
@@ -487,12 +502,9 @@
 
       tbody.appendChild(tr);
 
-      // Breakdown sub-row (AM + ADV employees, corrections)
-      var showExpand = hasBreakdown && !isFuture;
-      if (showExpand) {
+      // AM breakdown sub-row
+      if (showAMExpand) {
         var flDiv = window.flDivisor(year, month);
-
-        // AM + FL items
         var amItems = agg.breakdown.filter(function (b) {
           return b.role === 'account_manager' || b.role === 'freelancer';
         });
@@ -506,7 +518,6 @@
             (isFL ? '<span class="fl-divider">÷' + flDiv + ' = ' + window.fmtHours(counted) + '</span>' : '') +
           '</span>';
         }).join('');
-
         if (adjAm !== 0) {
           amBreakdownHtml +=
             '<span class="am-breakdown-item" style="color:var(--primary)">' +
@@ -515,39 +526,11 @@
               (adj && adj.note ? '<span>' + adj.note + '</span>' : '') +
             '</span>';
         }
-
-        // ADV items
-        var advItems = agg.breakdown.filter(function (b) { return b.role === 'advertising'; });
-        var advBreakdownHtml = advItems.map(function (b) {
-          return '<span class="am-breakdown-item">' +
-            '<span class="am-tag ' + window.getRoleCls(b.role) + '">' + window.getRoleShort(b.role) + '</span>' +
-            '<span class="emp-hours">' + window.fmtHours(b.hours) + '</span>' +
-            '<span>' + b.name + '</span>' +
-          '</span>';
-        }).join('');
-
-        if (adjAdv !== 0) {
-          advBreakdownHtml +=
-            '<span class="am-breakdown-item" style="color:var(--primary)">' +
-              '<span class="am-tag role-adv">Korr.</span>' +
-              '<span class="emp-hours">' + (adjAdv > 0 ? '+' : '') + window.fmtHours(adjAdv) + '</span>' +
-              (adj && adj.note ? '<span>' + adj.note + '</span>' : '') +
-            '</span>';
-        }
-
-        // Combine: separator between AM and ADV sections if both present
-        var breakdownHtml = amBreakdownHtml;
-        if (advBreakdownHtml) {
-          if (amBreakdownHtml) breakdownHtml += '<span class="am-breakdown-sep"></span>';
-          breakdownHtml += advBreakdownHtml;
-        }
-
-        var detailTr = document.createElement('tr');
-        detailTr.id        = expandId;
-        detailTr.className = 'am-breakdown-row hidden';
-        detailTr.innerHTML = '<td colspan="6"><div class="am-breakdown-inner">' + breakdownHtml + '</div></td>';
-        tbody.appendChild(detailTr);
-
+        var amExpandTr = document.createElement('tr');
+        amExpandTr.id        = expandId;
+        amExpandTr.className = 'am-breakdown-row hidden';
+        amExpandTr.innerHTML = '<td colspan="6"><div class="am-breakdown-inner">' + amBreakdownHtml + '</div></td>';
+        tbody.appendChild(amExpandTr);
         (function (bId, eId) {
           var btn = tr.querySelector('#' + bId);
           if (btn) btn.addEventListener('click', function (ev) {
@@ -557,6 +540,40 @@
             if (dest) dest.classList.toggle('hidden', !open);
           });
         })(btnId, expandId);
+      }
+
+      // ADV breakdown sub-row
+      if (showADVExpand) {
+        var advItems = agg.breakdown.filter(function (b) { return b.role === 'advertising'; });
+        var advBreakdownHtml = advItems.map(function (b) {
+          return '<span class="am-breakdown-item">' +
+            '<span class="am-tag ' + window.getRoleCls(b.role) + '">' + window.getRoleShort(b.role) + '</span>' +
+            '<span class="emp-hours">' + window.fmtHours(b.hours) + '</span>' +
+            '<span>' + b.name + '</span>' +
+          '</span>';
+        }).join('');
+        if (adjAdv !== 0) {
+          advBreakdownHtml +=
+            '<span class="am-breakdown-item" style="color:var(--primary)">' +
+              '<span class="am-tag role-adv">Korr.</span>' +
+              '<span class="emp-hours">' + (adjAdv > 0 ? '+' : '') + window.fmtHours(adjAdv) + '</span>' +
+              (adj && adj.note ? '<span>' + adj.note + '</span>' : '') +
+            '</span>';
+        }
+        var advExpandTr = document.createElement('tr');
+        advExpandTr.id        = advExpandId;
+        advExpandTr.className = 'am-breakdown-row hidden';
+        advExpandTr.innerHTML = '<td colspan="6"><div class="am-breakdown-inner">' + advBreakdownHtml + '</div></td>';
+        tbody.appendChild(advExpandTr);
+        (function (bId, eId) {
+          var btn = tr.querySelector('#' + bId);
+          if (btn) btn.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            var open = btn.classList.toggle('open');
+            var dest = document.getElementById(eId);
+            if (dest) dest.classList.toggle('hidden', !open);
+          });
+        })(advBtnId, advExpandId);
       }
 
       // Edit button (employee hours)
