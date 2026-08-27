@@ -414,6 +414,8 @@
       var hasAMData = agg.breakdown.some(function (b) {
         return b.role === 'account_manager' || b.role === 'freelancer';
       });
+      var hasADVData = agg.breakdown.some(function (b) { return b.role === 'advertising'; });
+      var hasBreakdown = hasAMData || hasADVData || bookingH > 0;
 
       // AM cell – badges for budget correction and project booking
       var adjAmBadge = (!isFuture && adjAm !== 0)
@@ -427,7 +429,7 @@
       var amCellContent;
       if (isFuture) {
         amCellContent = '<span class="text-muted">–</span>';
-      } else if (hasAMData || bookingH > 0) {
+      } else if (hasBreakdown) {
         amCellContent =
           '<button class="expand-btn" id="' + btnId + '" data-target="' + expandId + '">' +
             window.svgChevron() + ' ' + window.fmtHours(amTotal) +
@@ -485,13 +487,15 @@
 
       tbody.appendChild(tr);
 
-      // AM breakdown sub-row (shows synced hours only, correction shown as extra line)
-      var showExpand = hasAMData && !isFuture;
+      // Breakdown sub-row (AM + ADV employees, corrections)
+      var showExpand = hasBreakdown && !isFuture;
       if (showExpand) {
+        var flDiv = window.flDivisor(year, month);
+
+        // AM + FL items
         var amItems = agg.breakdown.filter(function (b) {
           return b.role === 'account_manager' || b.role === 'freelancer';
         });
-        var flDiv = window.flDivisor(year, month);
         var amBreakdownHtml = amItems.map(function (b) {
           var isFL    = b.role === 'freelancer';
           var counted = b.counted != null ? b.counted : b.hours;
@@ -512,10 +516,36 @@
             '</span>';
         }
 
+        // ADV items
+        var advItems = agg.breakdown.filter(function (b) { return b.role === 'advertising'; });
+        var advBreakdownHtml = advItems.map(function (b) {
+          return '<span class="am-breakdown-item">' +
+            '<span class="am-tag ' + window.getRoleCls(b.role) + '">' + window.getRoleShort(b.role) + '</span>' +
+            '<span class="emp-hours">' + window.fmtHours(b.hours) + '</span>' +
+            '<span>' + b.name + '</span>' +
+          '</span>';
+        }).join('');
+
+        if (adjAdv !== 0) {
+          advBreakdownHtml +=
+            '<span class="am-breakdown-item" style="color:var(--primary)">' +
+              '<span class="am-tag role-adv">Korr.</span>' +
+              '<span class="emp-hours">' + (adjAdv > 0 ? '+' : '') + window.fmtHours(adjAdv) + '</span>' +
+              (adj && adj.note ? '<span>' + adj.note + '</span>' : '') +
+            '</span>';
+        }
+
+        // Combine: separator between AM and ADV sections if both present
+        var breakdownHtml = amBreakdownHtml;
+        if (advBreakdownHtml) {
+          if (amBreakdownHtml) breakdownHtml += '<span class="am-breakdown-sep"></span>';
+          breakdownHtml += advBreakdownHtml;
+        }
+
         var detailTr = document.createElement('tr');
         detailTr.id        = expandId;
         detailTr.className = 'am-breakdown-row hidden';
-        detailTr.innerHTML = '<td colspan="6"><div class="am-breakdown-inner">' + amBreakdownHtml + '</div></td>';
+        detailTr.innerHTML = '<td colspan="6"><div class="am-breakdown-inner">' + breakdownHtml + '</div></td>';
         tbody.appendChild(detailTr);
 
         (function (bId, eId) {
