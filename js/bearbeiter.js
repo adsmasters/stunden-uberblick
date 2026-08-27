@@ -156,7 +156,7 @@
           if (!bookingsByClient[b.client_id]) bookingsByClient[b.client_id] = [];
           bookingsByClient[b.client_id].push(b);
         });
-        render(myClients, entriesByClient, adjByClient, bookingsByClient, year, month);
+        render(empId, myClients, entriesByClient, adjByClient, bookingsByClient, year, month);
       });
     }).catch(function (e) {
       showError('Fehler: ' + e.message);
@@ -164,7 +164,7 @@
   }
 
   // ── Render ────────────────────────────────────────────────────────────
-  function render(myClients, entriesByClient, adjByClient, bookingsByClient, year, month) {
+  function render(empId, myClients, entriesByClient, adjByClient, bookingsByClient, year, month) {
     loadingEl.classList.add('hidden');
 
     if (!myClients.length) {
@@ -182,31 +182,57 @@
       var adj         = adjByClient[c.id] || null;
 
       // Phase-aware budget + adjustment
-      var rawBdg     = outOfPeriod ? null : (role === 'am' ? bdg.am : bdg.adv);
-      var adjHours   = adj ? (role === 'am' ? (adj.am_hours || 0) : (adj.adv_hours || 0)) : 0;
+      var rawBdg      = outOfPeriod ? null : (role === 'am' ? bdg.am : bdg.adv);
+      var adjHours    = adj ? (role === 'am' ? (adj.am_hours || 0) : (adj.adv_hours || 0)) : 0;
       var monthBudget = rawBdg != null ? rawBdg + adjHours : null;
 
-      // Tracked hours
+      // All tracked hours for this client (all employees combined)
       var clientEntries = entriesByClient[c.id] || [];
-      var agg     = window.aggregateEntries(clientEntries, year, month);
-      var tracked = role === 'am' ? agg.amTotal : agg.advH;
-
-      // Add project bookings to AM tracked hours
+      var agg           = window.aggregateEntries(clientEntries, year, month);
       var clientBookings = bookingsByClient[c.id] || [];
-      var bookingH = bookingHoursForMonth(clientBookings, year, month);
-      if (role === 'am') tracked += bookingH;
+      var bookingH       = bookingHoursForMonth(clientBookings, year, month);
+      var totalTracked   = role === 'am' ? agg.amTotal + bookingH : agg.advH;
 
-      var remaining = monthBudget != null ? monthBudget - tracked : null;
+      // Own hours: only entries belonging to the selected employee
+      var myBreakdown = agg.breakdown.filter(function (b) {
+        if (b.employeeId !== empId) return false;
+        return role === 'am'
+          ? (b.role === 'account_manager' || b.role === 'freelancer')
+          : b.role === 'advertising';
+      });
+      var myHours = myBreakdown.reduce(function (s, b) {
+        return s + (b.counted != null ? b.counted : b.hours);
+      }, 0);
+      if (role === 'am') myHours += bookingH;
+
+      // Support hours: other employees who also worked on this client in the same role
+      var supportItems = agg.breakdown.filter(function (b) {
+        if (b.employeeId === empId) return false;
+        return role === 'am'
+          ? (b.role === 'account_manager' || b.role === 'freelancer')
+          : b.role === 'advertising';
+      });
+      // Aggregate support by employee name
+      var supportByName = {};
+      supportItems.forEach(function (b) {
+        var h = b.counted != null ? b.counted : b.hours;
+        supportByName[b.name] = (supportByName[b.name] || 0) + h;
+      });
+
+      // Offen is based on total tracked (own + support) vs budget
+      var remaining = monthBudget != null ? monthBudget - totalTracked : null;
 
       return {
-        client:      c,
-        role:        role,
-        outOfPeriod: outOfPeriod,
-        phase:       phase,
-        tracked:     tracked,
-        monthBudget: monthBudget,
-        remaining:   remaining,
-        bookingH:    bookingH,
+        client:        c,
+        role:          role,
+        outOfPeriod:   outOfPeriod,
+        phase:         phase,
+        myHours:       myHours,
+        totalTracked:  totalTracked,
+        supportByName: supportByName,
+        monthBudget:   monthBudget,
+        remaining:     remaining,
+        bookingH:      bookingH,
       };
     });
 
@@ -217,15 +243,16 @@
     });
 
     // Summary totals (active clients only)
-    var totTracked = 0, totBudget = 0, hasBudget = false;
+    var totMyHours = 0, totBudget = 0, totRemaining = 0, hasBudget = false, hasRemaining = false;
     rows.forEach(function (r) {
       if (r.outOfPeriod) return;
-      totTracked += r.tracked;
+      totMyHours += r.myHours;
       if (r.monthBudget != null) { totBudget += r.monthBudget; hasBudget = true; }
+      if (r.remaining  != null) { totRemaining += r.remaining; hasRemaining = true; }
     });
-    var totRemaining = hasBudget ? totBudget - totTracked : null;
+    if (!hasRemaining) totRemaining = null;
 
-    renderSummary(totTracked, totBudget, totRemaining, hasBudget, year, month);
+    renderSummary(totMyHours, totBudget, totRemaining, hasBudget, year, month);
     summaryEl.classList.remove('hidden');
 
     tbody.innerHTML = '';
@@ -275,10 +302,10 @@
                  overage < -0.05 ? 'color:var(--success);font-weight:600' : 'color:var(--text-muted)';
     }
 
-    // Progress bar
+    // Progress bar (based on total tracked vs budget)
     var progressHtml = '';
     if (r.monthBudget && r.monthBudget > 0 && !r.outOfPeriod) {
-      var pct    = Math.min(100, Math.round((r.tracked / r.monthBudget) * 100));
+      var pct     = Math.min(100, Math.round((r.totalTracked / r.monthBudget) * 100));
       var fillCls = pct >= 100 ? 'high' : pct >= 80 ? 'medium' : 'low';
       progressHtml =
         '<div class="util-bar-track" style="width:100%">' +
@@ -291,6 +318,18 @@
     var bookBadge = '';
     if (r.bookingH > 0 && !r.outOfPeriod) {
       bookBadge = ' <span class="adj-badge">+' + window.fmtHours(r.bookingH) + ' Buchung</span>';
+    }
+
+    // Support badges (other employees who also worked on this client)
+    var supportBadges = '';
+    if (!r.outOfPeriod) {
+      Object.keys(r.supportByName).forEach(function (name) {
+        var h = r.supportByName[name];
+        if (h > 0.01) {
+          supportBadges += ' <span class="adj-badge" title="Unterstützung von ' + escHtml(name) + '">' +
+            escHtml(name.split(' ')[0]) + ' −' + window.fmtHours(h) + '</span>';
+        }
+      });
     }
 
     // Budget cell
@@ -307,7 +346,7 @@
         escHtml(r.client.name) + '</a></td>' +
       '<td><span class="role-badge ' + roleCls + '">' + roleLabel + '</span></td>' +
       '<td class="num">' + budgetCell + '</td>' +
-      '<td class="num">' + (r.outOfPeriod ? '—' : window.fmtHours(r.tracked) + bookBadge) + '</td>' +
+      '<td class="num">' + (r.outOfPeriod ? '—' : window.fmtHours(r.myHours) + bookBadge + supportBadges) + '</td>' +
       '<td class="num" style="' + remStyle + '">' + remText + '</td>' +
       '<td class="util-bar-cell" style="padding:8px 10px">' +
         '<div class="util-bar-wrap">' + progressHtml + '</div>' +
