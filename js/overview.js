@@ -420,7 +420,7 @@
       const advOk   = advDiff != null && advDiff <= 0.05;
 
       const total     = amTotal + advH;
-      const hasBudget = c.am_budget != null || c.adv_budget != null;
+      const hasBudget = c.am_budget != null || c.adv_budget != null || c.am_budget2 != null || c.adv_budget2 != null;
       const totalBdg  = (annualAmBdg || 0) + (annualAdvBdg || 0);
       const totalDiff = hasBudget ? total - totalBdg : null;
 

@@ -284,6 +284,18 @@
     return window.MONTHS_DE[d.getUTCMonth()].slice(0, 3) + ' ' + d.getUTCFullYear();
   }
 
+  function currentBudget(c) {
+    if (c.budget_switch) {
+      var ym = window.currentYearMonth();
+      var bs = new Date(c.budget_switch);
+      var bsY = bs.getUTCFullYear(), bsM = bs.getUTCMonth() + 1;
+      if (ym.year > bsY || (ym.year === bsY && ym.month >= bsM)) {
+        return { am: c.am_budget2, adv: c.adv_budget2 };
+      }
+    }
+    return { am: c.am_budget, adv: c.adv_budget };
+  }
+
   function renderTable(clients) {
     tbody.innerHTML = '';
 
@@ -311,10 +323,10 @@
         '<td><a class="client-link" href="detail.html?id=' + encodeURIComponent(c.id) + '&name=' + encodeURIComponent(c.name) + '" style="font-weight:500">' + c.name + '</a></td>' +
         '<td>' + typeBadge(c) + '</td>' +
         '<td class="right" style="font-variant-numeric:tabular-nums">' +
-          (c.am_budget  != null ? '<strong>' + window.fmtHours(c.am_budget)  + '</strong> <span style="font-size:12px;color:var(--text-muted)">/ Monat</span>' : '<span class="text-muted">—</span>') +
+          (currentBudget(c).am  != null ? '<strong>' + window.fmtHours(currentBudget(c).am)  + '</strong> <span style="font-size:12px;color:var(--text-muted)">/ Monat</span>' : '<span class="text-muted">—</span>') +
         '</td>' +
         '<td class="right" style="font-variant-numeric:tabular-nums">' +
-          (c.adv_budget != null ? '<strong>' + window.fmtHours(c.adv_budget) + '</strong> <span style="font-size:12px;color:var(--text-muted)">/ Monat</span>' : '<span class="text-muted">—</span>') +
+          (currentBudget(c).adv != null ? '<strong>' + window.fmtHours(currentBudget(c).adv) + '</strong> <span style="font-size:12px;color:var(--text-muted)">/ Monat</span>' : '<span class="text-muted">—</span>') +
         '</td>' +
         '<td>' + empBadge(c.am_emp)  + '</td>' +
         '<td>' + empBadge(c.adv_emp) + '</td>' +
