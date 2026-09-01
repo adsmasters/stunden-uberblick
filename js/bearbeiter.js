@@ -181,13 +181,6 @@
       var bdg         = budgetForPhase(c, phase);
       var adj         = adjByClient[c.id] || null;
 
-      // Phase-aware budget + adjustment
-      var rawBdg      = outOfPeriod ? null : (role === 'am' ? bdg.am : bdg.adv);
-      var adjHours    = adj ? (role === 'am' ? (adj.am_hours || 0) : (adj.adv_hours || 0)) : 0;
-      var monthBudget = c.is_hourly
-        ? tracked + adjHours
-        : rawBdg != null ? rawBdg + adjHours : (adjHours !== 0 ? adjHours : null);
-
       // Tracked hours — only the selected employee's own hours
       var clientEntries  = entriesByClient[c.id] || [];
       var agg            = window.aggregateEntries(clientEntries, year, month);
@@ -204,6 +197,13 @@
         return s + (b.counted != null ? b.counted : b.hours);
       }, 0);
       if (role === 'am') tracked += bookingH;
+
+      // Phase-aware budget + adjustment (needs tracked, so computed after)
+      var rawBdg      = outOfPeriod ? null : (role === 'am' ? bdg.am : bdg.adv);
+      var adjHours    = adj ? (role === 'am' ? (adj.am_hours || 0) : (adj.adv_hours || 0)) : 0;
+      var monthBudget = c.is_hourly
+        ? tracked + adjHours
+        : rawBdg != null ? rawBdg + adjHours : (adjHours !== 0 ? adjHours : null);
 
       var remaining = monthBudget != null ? monthBudget - tracked : null;
 
