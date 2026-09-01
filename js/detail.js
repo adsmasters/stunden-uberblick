@@ -314,12 +314,19 @@
       var client = currentClient;
       titleEl.textContent = client.name;
       document.title = client.name + ' – Stundenübersicht';
-      amBudgetHdr.textContent  = client.am_budget  != null ? window.fmtHours(client.am_budget)  : '—';
-      advBudgetHdr.textContent = client.adv_budget != null ? window.fmtHours(client.adv_budget) : '—';
+      var ym           = window.currentYearMonth();
+      var curPhase     = getPhase(ym.year, ym.month, client);
+      var curBdg       = budgetForPhase(client, curPhase);
+      amBudgetHdr.textContent  = curBdg.am  != null ? window.fmtHours(curBdg.am)  : '—';
+      advBudgetHdr.textContent = curBdg.adv != null ? window.fmtHours(curBdg.adv) : '—';
 
       var bdgParts = [];
-      if (client.am_budget  != null) bdgParts.push('AM: '          + window.fmtHours(client.am_budget)  + '/Mo');
-      if (client.adv_budget != null) bdgParts.push('Advertising: ' + window.fmtHours(client.adv_budget) + '/Mo');
+      if (curBdg.am  != null) bdgParts.push('AM: '          + window.fmtHours(curBdg.am)  + '/Mo');
+      if (curBdg.adv != null) bdgParts.push('Advertising: ' + window.fmtHours(curBdg.adv) + '/Mo');
+      if (client.budget_switch && curPhase === 'phase2') {
+        var bs = new Date(client.budget_switch);
+        bdgParts.push('seit ' + window.MONTHS_DE[bs.getUTCMonth()] + ' ' + bs.getUTCFullYear());
+      }
       var cs = contractStart(client);
       if (cs) bdgParts.push('Vertragsstart: ' + window.MONTHS_DE[cs.month - 1] + ' ' + cs.year);
       budgetInfoEl.textContent = bdgParts.length ? bdgParts.join(' · ') : 'Kein Budget hinterlegt';
