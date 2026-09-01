@@ -317,15 +317,24 @@
       var ym           = window.currentYearMonth();
       var curPhase     = getPhase(ym.year, ym.month, client);
       var curBdg       = budgetForPhase(client, curPhase);
-      amBudgetHdr.textContent  = curBdg.am  != null ? window.fmtHours(curBdg.am)  : '—';
-      advBudgetHdr.textContent = curBdg.adv != null ? window.fmtHours(curBdg.adv) : '—';
+      if (client.is_hourly) {
+        amBudgetHdr.textContent  = 'Aufwand';
+        advBudgetHdr.textContent = 'Aufwand';
+      } else {
+        amBudgetHdr.textContent  = curBdg.am  != null ? window.fmtHours(curBdg.am)  : '—';
+        advBudgetHdr.textContent = curBdg.adv != null ? window.fmtHours(curBdg.adv) : '—';
+      }
 
       var bdgParts = [];
-      if (curBdg.am  != null) bdgParts.push('AM: '          + window.fmtHours(curBdg.am)  + '/Mo');
-      if (curBdg.adv != null) bdgParts.push('Advertising: ' + window.fmtHours(curBdg.adv) + '/Mo');
-      if (client.budget_switch && curPhase === 'phase2') {
-        var bs = new Date(client.budget_switch);
-        bdgParts.push('seit ' + window.MONTHS_DE[bs.getUTCMonth()] + ' ' + bs.getUTCFullYear());
+      if (client.is_hourly) {
+        bdgParts.push('Abrechnung nach Aufwand');
+      } else {
+        if (curBdg.am  != null) bdgParts.push('AM: '          + window.fmtHours(curBdg.am)  + '/Mo');
+        if (curBdg.adv != null) bdgParts.push('Advertising: ' + window.fmtHours(curBdg.adv) + '/Mo');
+        if (client.budget_switch && curPhase === 'phase2') {
+          var bs = new Date(client.budget_switch);
+          bdgParts.push('seit ' + window.MONTHS_DE[bs.getUTCMonth()] + ' ' + bs.getUTCFullYear());
+        }
       }
       var cs = contractStart(client);
       if (cs) bdgParts.push('Vertragsstart: ' + window.MONTHS_DE[cs.month - 1] + ' ' + cs.year);
@@ -381,8 +390,15 @@
       var bdg         = budgetForPhase(client, phase);
 
       // Effective budget = monthly budget ± correction
-      var effAmBudget  = (!outOfPeriod && bdg.am  != null) ? bdg.am  + adjAm  : null;
-      var effAdvBudget = (!outOfPeriod && bdg.adv != null) ? bdg.adv + adjAdv : null;
+      // For hourly clients: tracked hours become the budget automatically
+      var effAmBudget, effAdvBudget;
+      if (client.is_hourly && !outOfPeriod && !isFuture) {
+        effAmBudget  = amTotal + adjAm;
+        effAdvBudget = advH    + adjAdv;
+      } else {
+        effAmBudget  = (!outOfPeriod && bdg.am  != null) ? bdg.am  + adjAm  : null;
+        effAdvBudget = (!outOfPeriod && bdg.adv != null) ? bdg.adv + adjAdv : null;
+      }
 
       var amDiff  = effAmBudget  != null ? amTotal - effAmBudget  : null;
       var advDiff = effAdvBudget != null ? advH    - effAdvBudget : null;

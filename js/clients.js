@@ -21,27 +21,37 @@
   var clientIsProject        = document.getElementById('clientIsProject');
   var typeRetainerBtn        = document.getElementById('typeRetainerBtn');
   var typeProjectBtn         = document.getElementById('typeProjectBtn');
+  var typeHourlyBtn          = document.getElementById('typeHourlyBtn');
   var budgetSwitchWrap       = document.getElementById('budgetSwitchWrap');
   var clientBudgetSwitch     = document.getElementById('clientBudgetSwitch');
   var clientAmBudget2        = document.getElementById('clientAmBudget2');
   var clientAdvBudget2       = document.getElementById('clientAdvBudget2');
   var clientLexofficeName    = document.getElementById('clientLexofficeName');
+  var clientIsHourly         = document.getElementById('clientIsHourly');
 
-  function setClientType(isProject) {
-    clientIsProject.value = isProject ? '1' : '0';
-    typeRetainerBtn.style.background = !isProject ? 'var(--primary)' : '';
-    typeRetainerBtn.style.color      = !isProject ? '#fff'           : '';
-    typeProjectBtn.style.background  =  isProject ? 'var(--primary)' : '';
-    typeProjectBtn.style.color       =  isProject ? '#fff'           : '';
-    budgetSwitchWrap.style.display   =  isProject ? ''               : 'none';
-    if (!isProject) {
+  // type: 'retainer' | 'project' | 'hourly'
+  function setClientType(type) {
+    clientIsProject.value = type === 'project' ? '1' : '0';
+    clientIsHourly.value  = type === 'hourly'  ? '1' : '0';
+    [typeRetainerBtn, typeProjectBtn, typeHourlyBtn].forEach(function (btn) {
+      btn.style.background = '';
+      btn.style.color      = '';
+    });
+    var active = type === 'retainer' ? typeRetainerBtn
+               : type === 'project'  ? typeProjectBtn
+               :                       typeHourlyBtn;
+    active.style.background = 'var(--primary)';
+    active.style.color      = '#fff';
+    budgetSwitchWrap.style.display = type === 'project' ? '' : 'none';
+    if (type !== 'project') {
       clientBudgetSwitch.value = '';
       clientAmBudget2.value    = '';
       clientAdvBudget2.value   = '';
     }
   }
-  typeRetainerBtn.addEventListener('click', function () { setClientType(false); });
-  typeProjectBtn.addEventListener('click',  function () { setClientType(true); });
+  typeRetainerBtn.addEventListener('click', function () { setClientType('retainer'); });
+  typeProjectBtn.addEventListener('click',  function () { setClientType('project');  });
+  typeHourlyBtn.addEventListener('click',   function () { setClientType('hourly');   });
   var clientModalClose   = document.getElementById('clientModalClose');
   var clientModalCancel  = document.getElementById('clientModalCancel');
   var clientModalSave    = document.getElementById('clientModalSave');
@@ -131,7 +141,9 @@
     clientAdvEmpSelect.value = (client && client.adv_employee_id) || '';
     clientStartInput.value   = (client && client.contract_start)
       ? client.contract_start.substring(0, 7) : '';
-    setClientType(!!(client && client.is_project));
+    setClientType(client && client.is_hourly ? 'hourly'
+               : client && client.is_project ? 'project'
+               : 'retainer');
     // Prefer contract_end; fall back to project_end for legacy data
     var endVal = (client && client.contract_end) ? client.contract_end
                : (client && client.project_end)  ? client.project_end : null;
@@ -162,6 +174,7 @@
     var contractStart = clientStartInput.value ? clientStartInput.value + '-01' : null;
     var contractEnd   = clientContractEndInput.value ? clientContractEndInput.value + '-01' : null;
     var isProject     = clientIsProject.value === '1';
+    var isHourly      = clientIsHourly.value  === '1';
     var lexofficeName = clientLexofficeName.value.trim() || null;
     var budgetSwitch  = clientBudgetSwitch.value ? clientBudgetSwitch.value + '-01' : null;
     var amBudget2     = budgetSwitch ? (parseFloat(clientAmBudget2.value)  || null) : null;
@@ -175,6 +188,7 @@
                    contract_start: contractStart,
                    contract_end:   contractEnd,
                    is_project: isProject,
+                   is_hourly:  isHourly,
                    project_end: contractEnd,
                    lexoffice_name: lexofficeName,
                    budget_switch: budgetSwitch,
@@ -260,8 +274,8 @@
 
   function typeBadge(c) {
     var endDate = c.contract_end || c.project_end || null;
-    var label   = c.is_project ? 'Projekt' : 'Retainer';
-    var cls     = c.is_project ? 'type-project' : 'type-retainer';
+    var label   = c.is_hourly ? 'Aufwand' : c.is_project ? 'Projekt' : 'Retainer';
+    var cls     = c.is_hourly ? 'type-hourly' : c.is_project ? 'type-project' : 'type-retainer';
     var parts   = [];
     if (c.contract_start) parts.push(fmtMonthShort(c.contract_start));
     if (endDate)          parts.push(fmtMonthShort(endDate));

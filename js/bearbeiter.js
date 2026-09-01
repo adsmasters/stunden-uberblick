@@ -156,7 +156,7 @@
           if (!bookingsByClient[b.client_id]) bookingsByClient[b.client_id] = [];
           bookingsByClient[b.client_id].push(b);
         });
-        render(myClients, entriesByClient, adjByClient, bookingsByClient, year, month);
+        render(empId, myClients, entriesByClient, adjByClient, bookingsByClient, year, month);
       });
     }).catch(function (e) {
       showError('Fehler: ' + e.message);
@@ -164,7 +164,7 @@
   }
 
   // ── Render ────────────────────────────────────────────────────────────
-  function render(myClients, entriesByClient, adjByClient, bookingsByClient, year, month) {
+  function render(empId, myClients, entriesByClient, adjByClient, bookingsByClient, year, month) {
     loadingEl.classList.add('hidden');
 
     if (!myClients.length) {
@@ -184,14 +184,26 @@
       // Phase-aware budget + adjustment
       var rawBdg      = outOfPeriod ? null : (role === 'am' ? bdg.am : bdg.adv);
       var adjHours    = adj ? (role === 'am' ? (adj.am_hours || 0) : (adj.adv_hours || 0)) : 0;
-      var monthBudget = rawBdg != null ? rawBdg + adjHours : null;
+      var monthBudget = c.is_hourly
+        ? tracked + adjHours
+        : rawBdg != null ? rawBdg + adjHours : (adjHours !== 0 ? adjHours : null);
 
-      // Tracked hours
+      // Tracked hours — only the selected employee's own hours
       var clientEntries  = entriesByClient[c.id] || [];
       var agg            = window.aggregateEntries(clientEntries, year, month);
       var clientBookings = bookingsByClient[c.id] || [];
       var bookingH       = bookingHoursForMonth(clientBookings, year, month);
-      var tracked        = role === 'am' ? agg.amTotal + bookingH : agg.advH;
+
+      var myItems = agg.breakdown.filter(function (b) {
+        if (b.employeeId !== empId) return false;
+        return role === 'am'
+          ? (b.role === 'account_manager' || b.role === 'freelancer')
+          : b.role === 'advertising';
+      });
+      var tracked = myItems.reduce(function (s, b) {
+        return s + (b.counted != null ? b.counted : b.hours);
+      }, 0);
+      if (role === 'am') tracked += bookingH;
 
       var remaining = monthBudget != null ? monthBudget - tracked : null;
 
