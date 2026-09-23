@@ -58,32 +58,6 @@
       </div>
     </div>
 
-    <!-- Google Calendar connection -->
-    <div class="card">
-      <div class="card-header">
-        <h2>📅 Google Calendar-Verbindung</h2>
-        <span id="calendarStatus"></span>
-      </div>
-      <div class="card-body">
-        <div class="alert alert-info" style="margin-bottom:20px">
-          Für das Urlaubs-Tracking wird ein Google Calendar API-Key benötigt. Den Key erstellst du unter:
-          <strong>console.cloud.google.com → APIs &amp; Services → Credentials → Create API Key</strong>
-          (einschränken auf „Google Calendar API"). Der geteilte Urlaubskalender muss außerdem in Google Calendar unter
-          <strong>Freigabeeinstellungen → Öffentlich zugänglich machen</strong> gesetzt sein.
-        </div>
-        <div style="display:flex;flex-direction:column;gap:14px;max-width:520px">
-          <div class="field">
-            <label for="googleCalendarKey">Google Calendar API Key</label>
-            <input type="password" id="googleCalendarKey" placeholder="AIza…" autocomplete="off" style="font-family:monospace;font-size:12px">
-          </div>
-          <div style="display:flex;gap:10px;align-items:center">
-            <button id="googleCalendarSaveBtn" class="btn btn-primary">API Key speichern &amp; testen</button>
-            <span id="googleCalendarSaveStatus" style="font-size:13px"></span>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Step 0: Clockify connection -->
     <div class="card">
       <div class="card-header">
