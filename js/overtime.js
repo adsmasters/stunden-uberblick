@@ -106,7 +106,7 @@
       o.textContent = emp.name;
       empSel.appendChild(o);
     });
-    if (employees.length > 0) empSel.value = employees[0].id;
+    // no auto-select — user picks an employee
   }
 
   // ── Load data ─────────────────────────────────────────────────────────
@@ -387,9 +387,7 @@
 
         populateDropdown(allEmployees);
 
-        if (allEmployees.length > 0) {
-          loadData();
-        } else {
+        if (allEmployees.length === 0) {
           contentEl.innerHTML =
             '<div class="state-box">' +
               '<div class="icon">👥</div>' +
