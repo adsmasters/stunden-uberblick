@@ -1,7 +1,6 @@
 (function () {
   'use strict';
 
-  var CALENDAR_ID  = 'c_ccc8810b3cb48e05f29dede0af9a2d9dd2c3f9ee8f39c4ae9945a761e7cd6d6b@group.calendar.google.com';
   var HOURS_PER_DAY = 8;
 
   var yearSel   = document.getElementById('yearSelect');
@@ -10,7 +9,6 @@
   var errorEl   = document.getElementById('error');
   var contentEl = document.getElementById('content');
   var setupHint = document.getElementById('setupHint');
-  var calWarn   = document.getElementById('calWarn');
 
   // ── Working days (same logic as utilization.js) ───────────────────────
   function getWorkDays(year, month) {
@@ -47,7 +45,6 @@
     ];
   }
 
-  // Returns { month: holidayWorkdayCount }
   function holidayWorkdaysByMonth(year) {
     var counts = {};
     getGermanHolidays(year).forEach(function (h) {
@@ -60,11 +57,17 @@
     return counts;
   }
 
-  // Soll hours for a given year/month (same formula as Auslastung)
   function getSollHours(year, month, holidayDays) {
     var effDays = getWorkDays(year, month) - (holidayDays[month] || 0);
     return effDays * HOURS_PER_DAY;
   }
+
+  // ── State ─────────────────────────────────────────────────────────────
+  var currentYear      = null;
+  var currentEmployees = [];
+  var currentUtilMap   = {};
+  var currentVacMap    = {};   // { empId: { month: days } } — in-memory, saved to DB on change
+  var currentHolidays  = {};
 
   // ── Init year select ──────────────────────────────────────────────────
   (function () {
@@ -76,81 +79,12 @@
     }
   })();
 
-  // ── Calendar helpers ──────────────────────────────────────────────────
-
-  // Count Mon–Fri days (UTC) of [startDate, endDate) that fall in year/month
-  function countVacDaysInMonth(startDate, endDate, year, month) {
-    var count = 0;
-    var cur   = new Date(startDate.getTime());
-    while (cur < endDate) {
-      var dow = cur.getUTCDay();
-      if (cur.getUTCFullYear() === year &&
-          cur.getUTCMonth() + 1 === month &&
-          dow >= 1 && dow <= 5) {
-        count++;
-      }
-      cur.setUTCDate(cur.getUTCDate() + 1);
-    }
-    return count;
-  }
-
-  // Case-insensitive: does event summary contain any word (>2 chars) from employee name?
-  function matchesEmployee(summary, empName) {
-    if (!summary) return false;
-    var sumLower = summary.toLowerCase();
-    var words    = empName.toLowerCase().split(/\s+/).filter(function (w) { return w.length > 2; });
-    return words.some(function (w) { return sumLower.indexOf(w) !== -1; });
-  }
-
-  // Fetch all-day events from Google Calendar for the given year
-  function fetchCalendarEvents(year, apiKey) {
-    var encodedId = encodeURIComponent(CALENDAR_ID);
-    var url = 'https://www.googleapis.com/calendar/v3/calendars/' +
-      encodedId + '/events' +
-      '?key=' + encodeURIComponent(apiKey) +
-      '&timeMin=' + year + '-01-01T00:00:00Z' +
-      '&timeMax=' + (year + 1) + '-01-01T00:00:00Z' +
-      '&singleEvents=true&maxResults=500';
-
-    return fetch(url).then(function (res) {
-      if (!res.ok) throw new Error('Google Calendar API – HTTP ' + res.status);
-      return res.json();
-    }).then(function (data) {
-      // Keep only all-day events (have start.date, not start.dateTime)
-      return (data.items || []).filter(function (e) {
-        return e.start && e.start.date && !e.start.dateTime;
-      });
-    });
-  }
-
-  // Build vacation map: { empId: { month: days } }
-  function buildVacMap(employees, events, year) {
-    var map = {};
-    employees.forEach(function (emp) {
-      map[emp.id] = {};
-      events.forEach(function (evt) {
-        if (!matchesEmployee(evt.summary, emp.name)) return;
-        // Google Calendar end date is exclusive
-        var startDate = new Date(evt.start.date + 'T00:00:00Z');
-        var endDate   = new Date(evt.end.date   + 'T00:00:00Z');
-        for (var m = 1; m <= 12; m++) {
-          var days = countVacDaysInMonth(startDate, endDate, year, m);
-          if (days > 0) {
-            map[emp.id][m] = (map[emp.id][m] || 0) + days;
-          }
-        }
-      });
-    });
-    return map;
-  }
-
   // ── State helpers ─────────────────────────────────────────────────────
   function showLoading() {
     loadingEl.innerHTML = '<div class="loading-bar"><div class="spinner"></div>Lade Daten…</div>';
     loadingEl.classList.remove('hidden');
     contentEl.innerHTML = '';
     errorEl.innerHTML   = '';
-    calWarn.classList.add('hidden');
   }
   function hideLoading() { loadingEl.classList.add('hidden'); }
   function showError(msg) {
@@ -161,59 +95,107 @@
   // ── Load data ─────────────────────────────────────────────────────────
   function loadData() {
     showLoading();
-    var year        = parseInt(yearSel.value, 10);
-    var holidayDays = holidayWorkdaysByMonth(year);
-    var apiKey      = localStorage.getItem('googleCalendarApiKey');
-
-    // null result means "no key"; [] means "key present, fetch failed or no events"
-    var calPromise = apiKey
-      ? fetchCalendarEvents(year, apiKey).catch(function () { return []; })
-      : Promise.resolve(null);
+    currentYear     = parseInt(yearSel.value, 10);
+    currentHolidays = holidayWorkdaysByMonth(currentYear);
 
     Promise.all([
       window.db.employees.listActive(),
-      window.db.utilHours.forYear(year),
-      calPromise,
+      window.db.utilHours.forYear(currentYear),
+      window.db.absences.forYear(currentYear),
     ]).then(function (results) {
-      var employees = results[0];
-      var utilData  = results[1];
-      var events    = results[2]; // null = no API key
+      var employees   = results[0];
+      var utilData    = results[1];
+      var absenceData = results[2];
 
-      // Include all active employees except those explicitly excluded (monthly_target_hours === null)
-      var targetEmps = employees.filter(function (e) {
+      // Only employees opted-in (monthly_target_hours != null)
+      currentEmployees = employees.filter(function (e) {
         return e.monthly_target_hours != null && e.active === true;
       });
 
-      // Show calendar warning when no API key
-      if (!apiKey) {
-        calWarn.classList.remove('hidden');
-      }
-
       // Build util map: { empId: { month: hours } }
-      var utilMap = {};
+      currentUtilMap = {};
       utilData.forEach(function (u) {
-        if (!utilMap[u.employee_id]) utilMap[u.employee_id] = {};
-        utilMap[u.employee_id][u.month] = u.hours || 0;
+        if (!currentUtilMap[u.employee_id]) currentUtilMap[u.employee_id] = {};
+        currentUtilMap[u.employee_id][u.month] = u.hours || 0;
       });
 
-      // Build vacation map (empty if no calendar data)
-      var vacMap = (events !== null && events.length > 0)
-        ? buildVacMap(targetEmps, events, year)
-        : {};
+      // Build vac map from DB: { empId: { month: vacationDays } }
+      currentVacMap = {};
+      absenceData.forEach(function (a) {
+        if (!currentVacMap[a.employee_id]) currentVacMap[a.employee_id] = {};
+        currentVacMap[a.employee_id][a.month] = a.vacation_days || 0;
+      });
 
       hideLoading();
-      renderContent(targetEmps, utilMap, vacMap, year, holidayDays);
+      renderContent();
     }).catch(function (e) {
       showError('Fehler beim Laden: ' + e.message);
     });
   }
 
-  // ── Render ────────────────────────────────────────────────────────────
-  function renderContent(employees, utilMap, vacMap, year, holidayDays) {
-    var ym = window.currentYearMonth();
-    var maxMonth = (year === ym.year) ? ym.month : 12;
+  // ── Save vacation days for one cell ──────────────────────────────────
+  function saveVacation(empId, month, days) {
+    if (!currentVacMap[empId]) currentVacMap[empId] = {};
+    currentVacMap[empId][month] = days;
+    window.db.absences.upsert(empId, currentYear, month, days, 0)
+      .catch(function () {
+        // silently ignore — data stays in memory for the session
+      });
+    rerenderTotals(empId);
+  }
 
-    if (!employees.length) {
+  // ── Re-render just the totals row for one employee ────────────────────
+  function rerenderTotals(empId) {
+    var ym       = window.currentYearMonth();
+    var maxMonth = (currentYear === ym.year) ? ym.month : 12;
+    var empVac   = currentVacMap[empId] || {};
+    var empUtil  = currentUtilMap[empId] || {};
+
+    var totalTracked = 0, totalTarget = 0, totalAdj = 0, totalOT = 0, totalVac = 0;
+    for (var m = 1; m <= maxMonth; m++) {
+      var tracked   = empUtil[m]  || 0;
+      var vacDays   = empVac[m]   || 0;
+      var target    = getSollHours(currentYear, m, currentHolidays);
+      var adjTarget = Math.max(0, target - vacDays * HOURS_PER_DAY);
+      var overtime  = Math.max(0, tracked - adjTarget);
+      totalTracked += tracked;
+      totalTarget  += target;
+      totalAdj     += adjTarget;
+      totalOT      += overtime;
+      totalVac     += vacDays;
+
+      // Update overtime cell for this row
+      var otCell = document.getElementById('ot-' + empId + '-' + m);
+      if (otCell) {
+        otCell.textContent = overtime > 0 ? window.fmtHours(overtime) : '—';
+        otCell.style.color = overtime > 0 ? '#dc2626' : 'var(--text-muted)';
+        otCell.style.fontWeight = overtime > 0 ? '700' : '';
+      }
+      // Update adjTarget cell
+      var adjCell = document.getElementById('adj-' + empId + '-' + m);
+      if (adjCell) {
+        adjCell.textContent = window.fmtHours(adjTarget);
+      }
+    }
+
+    var foot = document.getElementById('foot-' + empId);
+    if (!foot) return;
+    foot.cells[1].textContent = window.fmtHours(totalTarget);
+    foot.cells[2].textContent = totalVac > 0 ? totalVac : '—';
+    foot.cells[2].style.color = totalVac > 0 ? 'var(--primary)' : 'var(--text-muted)';
+    foot.cells[3].textContent = window.fmtHours(totalAdj);
+    foot.cells[4].textContent = totalTracked > 0 ? window.fmtHours(totalTracked) : '—';
+    foot.cells[5].textContent = totalOT > 0 ? window.fmtHours(totalOT) : '—';
+    foot.cells[5].style.color = totalOT > 0 ? '#dc2626' : 'var(--text-muted)';
+    foot.cells[5].style.fontWeight = totalOT > 0 ? '700' : '';
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────
+  function renderContent() {
+    var ym       = window.currentYearMonth();
+    var maxMonth = (currentYear === ym.year) ? ym.month : 12;
+
+    if (!currentEmployees.length) {
       contentEl.innerHTML =
         '<div class="state-box">' +
           '<div class="icon">👥</div>' +
@@ -225,9 +207,9 @@
 
     var html = '';
 
-    employees.forEach(function (emp) {
-      var empUtil = utilMap[emp.id] || {};
-      var empVac  = vacMap[emp.id]  || {};
+    currentEmployees.forEach(function (emp) {
+      var empUtil = currentUtilMap[emp.id] || {};
+      var empVac  = currentVacMap[emp.id]  || {};
 
       var totalTracked = 0, totalTarget = 0, totalAdj = 0, totalOT = 0, totalVac = 0;
       var rowsHtml = '';
@@ -235,7 +217,7 @@
       for (var m = 1; m <= maxMonth; m++) {
         var tracked   = empUtil[m] || 0;
         var vacDays   = empVac[m]  || 0;
-        var target    = getSollHours(year, m, holidayDays);
+        var target    = getSollHours(currentYear, m, currentHolidays);
         var adjTarget = Math.max(0, target - vacDays * HOURS_PER_DAY);
         var overtime  = Math.max(0, tracked - adjTarget);
 
@@ -245,38 +227,31 @@
         totalOT      += overtime;
         totalVac     += vacDays;
 
-        var isCurrent = (year === ym.year && m === ym.month);
+        var isCurrent = (currentYear === ym.year && m === ym.month);
         var rowCls    = isCurrent ? ' class="month-current"' : '';
-
-        var vacCell = vacDays > 0
-          ? '<td class="center" style="color:var(--primary);font-weight:500">' + vacDays + '</td>'
-          : '<td class="center" style="color:var(--text-muted)">—</td>';
-
-        var otCell = overtime > 0
-          ? '<td class="right" style="color:#dc2626;font-weight:700">' + window.fmtHours(overtime) + '</td>'
-          : '<td class="right" style="color:var(--text-muted)">—</td>';
 
         rowsHtml +=
           '<tr' + rowCls + '>' +
             '<td>' + window.MONTHS_DE[m - 1] + '</td>' +
             '<td class="right" style="font-variant-numeric:tabular-nums">' + window.fmtHours(target) + '</td>' +
-            vacCell +
-            '<td class="right" style="font-variant-numeric:tabular-nums">' + window.fmtHours(adjTarget) + '</td>' +
+            '<td class="center">' +
+              '<input type="number" min="0" max="31" step="1"' +
+                ' data-emp="' + emp.id + '" data-month="' + m + '"' +
+                ' value="' + (vacDays || '') + '"' +
+                ' placeholder="0"' +
+                ' style="width:56px;text-align:center;padding:3px 6px;border:1px solid var(--border);' +
+                         'border-radius:4px;font-size:13px;background:var(--surface)">' +
+            '</td>' +
+            '<td class="right" id="adj-' + emp.id + '-' + m + '" style="font-variant-numeric:tabular-nums">' + window.fmtHours(adjTarget) + '</td>' +
             '<td class="right" style="font-variant-numeric:tabular-nums">' +
               (tracked > 0 ? window.fmtHours(tracked) : '<span style="color:var(--text-muted)">—</span>') +
             '</td>' +
-            otCell +
+            '<td class="right" id="ot-' + emp.id + '-' + m + '"' +
+              (overtime > 0 ? ' style="color:#dc2626;font-weight:700"' : ' style="color:var(--text-muted)"') + '>' +
+              (overtime > 0 ? window.fmtHours(overtime) : '—') +
+            '</td>' +
           '</tr>';
       }
-
-      // Summary / total row
-      var sumVacCell = totalVac > 0
-        ? '<td class="center" style="color:var(--primary);font-weight:700">' + totalVac + '</td>'
-        : '<td class="center" style="color:var(--text-muted)">—</td>';
-
-      var sumOtCell = totalOT > 0
-        ? '<td class="right" style="color:#dc2626;font-weight:700">' + window.fmtHours(totalOT) + '</td>'
-        : '<td class="right" style="color:var(--text-muted)">—</td>';
 
       html +=
         '<div class="card" style="margin-bottom:20px">' +
@@ -299,19 +274,22 @@
                   '<th class="right">Überstunden</th>' +
                 '</tr>' +
               '</thead>' +
-              '<tbody>' +
-                rowsHtml +
-              '</tbody>' +
+              '<tbody>' + rowsHtml + '</tbody>' +
               '<tfoot>' +
-                '<tr style="font-weight:700;border-top:2px solid var(--border)">' +
+                '<tr id="foot-' + emp.id + '" style="font-weight:700;border-top:2px solid var(--border)">' +
                   '<td>Gesamt</td>' +
                   '<td class="right" style="font-variant-numeric:tabular-nums">' + window.fmtHours(totalTarget) + '</td>' +
-                  sumVacCell +
+                  '<td class="center" style="color:' + (totalVac > 0 ? 'var(--primary)' : 'var(--text-muted)') + '">' +
+                    (totalVac > 0 ? totalVac : '—') +
+                  '</td>' +
                   '<td class="right" style="font-variant-numeric:tabular-nums">' + window.fmtHours(totalAdj) + '</td>' +
                   '<td class="right" style="font-variant-numeric:tabular-nums">' +
                     (totalTracked > 0 ? window.fmtHours(totalTracked) : '—') +
                   '</td>' +
-                  sumOtCell +
+                  '<td class="right"' +
+                    (totalOT > 0 ? ' style="color:#dc2626;font-weight:700"' : ' style="color:var(--text-muted)"') + '>' +
+                    (totalOT > 0 ? window.fmtHours(totalOT) : '—') +
+                  '</td>' +
                 '</tr>' +
               '</tfoot>' +
             '</table>' +
@@ -320,6 +298,17 @@
     });
 
     contentEl.innerHTML = html;
+
+    // Attach input listeners for vacation cells
+    contentEl.querySelectorAll('input[data-emp]').forEach(function (inp) {
+      inp.addEventListener('change', function () {
+        var empId = inp.getAttribute('data-emp');
+        var month = parseInt(inp.getAttribute('data-month'), 10);
+        var days  = Math.max(0, parseInt(inp.value, 10) || 0);
+        inp.value = days || '';
+        saveVacation(empId, month, days);
+      });
+    });
   }
 
   // ── Boot ──────────────────────────────────────────────────────────────
