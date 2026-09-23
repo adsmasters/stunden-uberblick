@@ -178,8 +178,10 @@ tbody tr { border-bottom: 1px solid var(--border-light); transition: background 
 tbody tr:last-child { border-bottom: none; }
 tbody tr:hover { background: #fafbfd; }
 tbody td { padding: 10px 14px; vertical-align: middle; }
-tbody td.right { text-align: right; }
-tbody td.center { text-align: center; }
+tbody td.right,
+tfoot td.right  { text-align: right; }
+tbody td.center,
+tfoot td.center { text-align: center; }
 tbody td.mono { font-variant-numeric: tabular-nums; }
 
 /* ── Colored department cells ── */
