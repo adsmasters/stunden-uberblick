@@ -39,10 +39,16 @@
       <h1>Überstunden &amp; Urlaub</h1>
       <div class="sub">Überstunden und Urlaubsübersicht pro Mitarbeiter</div>
     </div>
-    <div class="filters">
-      <div class="filter-group">
-        <label for="yearSelect">Jahr</label>
-        <select id="yearSelect" style="width:82px"></select>
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <div class="field" style="margin:0">
+        <label for="empSelect" style="font-size:12px;margin-bottom:4px;display:block;color:var(--text-secondary)">Mitarbeiter</label>
+        <select id="empSelect" style="height:36px;padding:0 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:#fff;min-width:180px">
+          <option value="">— Bitte wählen —</option>
+        </select>
+      </div>
+      <div class="field" style="margin:0">
+        <label for="yearSelect" style="font-size:12px;margin-bottom:4px;display:block;color:var(--text-secondary)">Jahr</label>
+        <select id="yearSelect" style="height:36px;padding:0 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:#fff;width:90px"></select>
       </div>
       <button id="loadBtn" class="btn btn-primary">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
@@ -53,6 +59,7 @@
 
   <div id="error"></div>
   <div id="loading"></div>
+  <div id="summary" class="hidden" style="margin-bottom:20px"></div>
   <div id="content"></div>
 
 </main>
@@ -62,7 +69,7 @@
 <script src="js/appsettings.js"></script>
 <script src="js/utils.js"></script>
 <script src="js/auth.js"></script>
-<script src="js/overtime.js?v=3"></script>
+<script src="js/overtime.js?v=4"></script>
 <script defer src="https://adsmasters.github.io/hub/backlink.js"></script>
 </body>
 </html>
