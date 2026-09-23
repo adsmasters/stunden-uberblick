@@ -5,9 +5,9 @@
   // them to localStorage so clockify.js can use them synchronously.
   // Falls back silently to whatever is already in localStorage.
 
-  window.settingsReady = (function () {
-    if (!window.isConfigured()) return Promise.resolve();
-    return window.db.settings.getAll()
+  window.settingsReady = new Promise(function (resolve) {
+    if (!window.isConfigured()) { resolve(); return; }
+    window.db.settings.getAll()
       .then(function (rows) {
         (rows || []).forEach(function (row) {
           switch (row.key) {
@@ -17,10 +17,12 @@
             case 'google_calendar_api_key': localStorage.setItem('googleCalendarApiKey',  row.value); break;
           }
         });
+        resolve();
       })
       .catch(function () {
-        // table may not exist yet – fall back to existing localStorage values
+        // app_settings table may not exist yet – fall back to existing localStorage values
+        resolve();
       });
-  })();
+  });
 
 })();
