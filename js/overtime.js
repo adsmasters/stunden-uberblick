@@ -117,8 +117,8 @@
     currentHolidays = holidayWorkdaysByMonth(currentYear);
 
     Promise.all([
-      window.db.utilHours.forYear(currentYear),
-      window.db.absences.forYear(currentYear),
+      window.db.utilHours.forYear(currentYear).catch(function () { return []; }),
+      window.db.absences.forYear(currentYear).catch(function () { return []; }),
     ]).then(function (results) {
       utilMap = {};
       results[0].forEach(function (u) {
@@ -369,7 +369,7 @@
     setupHint.classList.remove('hidden');
   } else {
     window.settingsReady.then(function () {
-      window.db.employees.listActive().then(function (employees) {
+      window.db.employees.listActive().catch(function () { return []; }).then(function (employees) {
         allEmployees = employees.filter(function (e) {
           return e.monthly_target_hours != null && e.active !== false;
         });
