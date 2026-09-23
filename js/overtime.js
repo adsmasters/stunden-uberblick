@@ -4,13 +4,15 @@
   var HOURS_PER_DAY = 8;
 
   var yearSel   = document.getElementById('yearSelect');
+  var empSel    = document.getElementById('empSelect');
   var loadBtn   = document.getElementById('loadBtn');
   var loadingEl = document.getElementById('loading');
   var errorEl   = document.getElementById('error');
+  var summaryEl = document.getElementById('summary');
   var contentEl = document.getElementById('content');
   var setupHint = document.getElementById('setupHint');
 
-  // ── Working days (same logic as utilization.js) ───────────────────────
+  // ── Working days (same as utilization.js) ────────────────────────────
   function getWorkDays(year, month) {
     var count = 0;
     var days  = new Date(year, month, 0).getDate();
@@ -58,16 +60,18 @@
   }
 
   function getSollHours(year, month, holidayDays) {
-    var effDays = getWorkDays(year, month) - (holidayDays[month] || 0);
-    return effDays * HOURS_PER_DAY;
+    return (getWorkDays(year, month) - (holidayDays[month] || 0)) * HOURS_PER_DAY;
   }
 
   // ── State ─────────────────────────────────────────────────────────────
-  var currentYear      = null;
-  var currentEmployees = [];
-  var currentUtilMap   = {};
-  var currentVacMap    = {};   // { empId: { month: days } } — in-memory, saved to DB on change
-  var currentHolidays  = {};
+  var allEmployees    = [];
+  var vacEntitlements = {}; // key: "vac_ent_{empId}_{year}" → days
+  var currentYear     = null;
+  var currentHolidays = {};
+  var utilMap         = {}; // { empId: { month: hours } }
+  var vacMap          = {}; // { empId: { month: days } }
+
+  function entKey(empId, year) { return 'vac_ent_' + empId + '_' + year; }
 
   // ── Init year select ──────────────────────────────────────────────────
   (function () {
@@ -83,6 +87,7 @@
   function showLoading() {
     loadingEl.innerHTML = '<div class="loading-bar"><div class="spinner"></div>Lade Daten…</div>';
     loadingEl.classList.remove('hidden');
+    summaryEl.classList.add('hidden');
     contentEl.innerHTML = '';
     errorEl.innerHTML   = '';
   }
@@ -92,223 +97,271 @@
     loadingEl.classList.add('hidden');
   }
 
+  // ── Populate employee dropdown ─────────────────────────────────────────
+  function populateDropdown(employees) {
+    while (empSel.options.length > 1) empSel.remove(1);
+    employees.forEach(function (emp) {
+      var o = document.createElement('option');
+      o.value = emp.id;
+      o.textContent = emp.name;
+      empSel.appendChild(o);
+    });
+    if (employees.length > 0) empSel.value = employees[0].id;
+  }
+
   // ── Load data ─────────────────────────────────────────────────────────
   function loadData() {
+    if (!empSel.value) return;
     showLoading();
     currentYear     = parseInt(yearSel.value, 10);
     currentHolidays = holidayWorkdaysByMonth(currentYear);
 
     Promise.all([
-      window.db.employees.listActive(),
       window.db.utilHours.forYear(currentYear),
       window.db.absences.forYear(currentYear),
     ]).then(function (results) {
-      var employees   = results[0];
-      var utilData    = results[1];
-      var absenceData = results[2];
-
-      // Only employees opted-in (monthly_target_hours != null)
-      currentEmployees = employees.filter(function (e) {
-        return e.monthly_target_hours != null && e.active === true;
+      utilMap = {};
+      results[0].forEach(function (u) {
+        if (!utilMap[u.employee_id]) utilMap[u.employee_id] = {};
+        utilMap[u.employee_id][u.month] = u.hours || 0;
       });
 
-      // Build util map: { empId: { month: hours } }
-      currentUtilMap = {};
-      utilData.forEach(function (u) {
-        if (!currentUtilMap[u.employee_id]) currentUtilMap[u.employee_id] = {};
-        currentUtilMap[u.employee_id][u.month] = u.hours || 0;
-      });
-
-      // Build vac map from DB: { empId: { month: vacationDays } }
-      currentVacMap = {};
-      absenceData.forEach(function (a) {
-        if (!currentVacMap[a.employee_id]) currentVacMap[a.employee_id] = {};
-        currentVacMap[a.employee_id][a.month] = a.vacation_days || 0;
+      vacMap = {};
+      results[1].forEach(function (a) {
+        if (!vacMap[a.employee_id]) vacMap[a.employee_id] = {};
+        vacMap[a.employee_id][a.month] = a.vacation_days || 0;
       });
 
       hideLoading();
-      renderContent();
+      render();
     }).catch(function (e) {
       showError('Fehler beim Laden: ' + e.message);
     });
   }
 
-  // ── Save vacation days for one cell ──────────────────────────────────
+  // ── Save vacation days (per month) ────────────────────────────────────
   function saveVacation(empId, month, days) {
-    if (!currentVacMap[empId]) currentVacMap[empId] = {};
-    currentVacMap[empId][month] = days;
-    window.db.absences.upsert(empId, currentYear, month, days, 0)
-      .catch(function () {
-        // silently ignore — data stays in memory for the session
-      });
-    rerenderTotals(empId);
+    if (!vacMap[empId]) vacMap[empId] = {};
+    vacMap[empId][month] = days;
+    window.db.absences.upsert(empId, currentYear, month, days, 0).catch(function () {});
+    rerenderDynamic(empId);
   }
 
-  // ── Re-render just the totals row for one employee ────────────────────
-  function rerenderTotals(empId) {
+  // ── Save vacation entitlement (per year) ──────────────────────────────
+  function saveEntitlement(empId, year, days) {
+    var key = entKey(empId, year);
+    vacEntitlements[key] = days;
+    window.db.settings.set(key, String(days)).catch(function () {});
+    rerenderDynamic(empId);
+  }
+
+  // ── Re-render dynamic cells without full redraw ───────────────────────
+  function rerenderDynamic(empId) {
     var ym       = window.currentYearMonth();
     var maxMonth = (currentYear === ym.year) ? ym.month : 12;
-    var empVac   = currentVacMap[empId] || {};
-    var empUtil  = currentUtilMap[empId] || {};
+    var empVac   = vacMap[empId]  || {};
+    var empUtil  = utilMap[empId] || {};
 
-    var totalTracked = 0, totalTarget = 0, totalAdj = 0, totalOT = 0, totalVac = 0;
+    var totalVac = 0, totalOT = 0, totalAdj = 0, totalTarget = 0, totalTracked = 0;
+
     for (var m = 1; m <= maxMonth; m++) {
-      var tracked   = empUtil[m]  || 0;
-      var vacDays   = empVac[m]   || 0;
+      var tracked   = empUtil[m] || 0;
+      var vacDays   = empVac[m]  || 0;
       var target    = getSollHours(currentYear, m, currentHolidays);
       var adjTarget = Math.max(0, target - vacDays * HOURS_PER_DAY);
       var overtime  = Math.max(0, tracked - adjTarget);
+
       totalTracked += tracked;
       totalTarget  += target;
       totalAdj     += adjTarget;
       totalOT      += overtime;
       totalVac     += vacDays;
 
-      // Update overtime cell for this row
-      var otCell = document.getElementById('ot-' + empId + '-' + m);
+      var adjCell = document.getElementById('adj-' + m);
+      if (adjCell) adjCell.textContent = window.fmtHours(adjTarget);
+
+      var otCell = document.getElementById('ot-' + m);
       if (otCell) {
-        otCell.textContent = overtime > 0 ? window.fmtHours(overtime) : '—';
-        otCell.style.color = overtime > 0 ? '#dc2626' : 'var(--text-muted)';
+        otCell.textContent   = overtime > 0 ? window.fmtHours(overtime) : '—';
+        otCell.style.color   = overtime > 0 ? '#dc2626' : 'var(--text-muted)';
         otCell.style.fontWeight = overtime > 0 ? '700' : '';
-      }
-      // Update adjTarget cell
-      var adjCell = document.getElementById('adj-' + empId + '-' + m);
-      if (adjCell) {
-        adjCell.textContent = window.fmtHours(adjTarget);
       }
     }
 
-    var foot = document.getElementById('foot-' + empId);
-    if (!foot) return;
-    foot.cells[1].textContent = window.fmtHours(totalTarget);
-    foot.cells[2].textContent = totalVac > 0 ? totalVac : '—';
-    foot.cells[2].style.color = totalVac > 0 ? 'var(--primary)' : 'var(--text-muted)';
-    foot.cells[3].textContent = window.fmtHours(totalAdj);
-    foot.cells[4].textContent = totalTracked > 0 ? window.fmtHours(totalTracked) : '—';
-    foot.cells[5].textContent = totalOT > 0 ? window.fmtHours(totalOT) : '—';
-    foot.cells[5].style.color = totalOT > 0 ? '#dc2626' : 'var(--text-muted)';
-    foot.cells[5].style.fontWeight = totalOT > 0 ? '700' : '';
+    // Update footer
+    var foot = document.getElementById('tfoot-row');
+    if (foot) {
+      foot.cells[1].textContent = window.fmtHours(totalTarget);
+      foot.cells[2].textContent = totalVac > 0 ? totalVac : '—';
+      foot.cells[2].style.color = totalVac > 0 ? 'var(--primary)' : 'var(--text-muted)';
+      foot.cells[3].textContent = window.fmtHours(totalAdj);
+      foot.cells[4].textContent = totalTracked > 0 ? window.fmtHours(totalTracked) : '—';
+      foot.cells[5].textContent = totalOT > 0 ? window.fmtHours(totalOT) : '—';
+      foot.cells[5].style.color = totalOT > 0 ? '#dc2626' : 'var(--text-muted)';
+      foot.cells[5].style.fontWeight = totalOT > 0 ? '700' : '';
+    }
+
+    // Update summary bar
+    var entitlement = vacEntitlements[entKey(empId, currentYear)];
+    if (entitlement == null) {
+      var emp = allEmployees.find(function (e) { return e.id === empId; });
+      if (emp && emp.monthly_target_hours != null) entitlement = emp.monthly_target_hours;
+    }
+    renderSummary(empId, totalVac, entitlement);
   }
 
-  // ── Render ────────────────────────────────────────────────────────────
-  function renderContent() {
-    var ym       = window.currentYearMonth();
-    var maxMonth = (currentYear === ym.year) ? ym.month : 12;
+  // ── Render vacation summary bar ───────────────────────────────────────
+  function renderSummary(empId, usedDays, entitlement) {
+    var remaining = entitlement != null ? entitlement - usedDays : null;
+    var remColor  = remaining != null && remaining < 0 ? '#dc2626' : 'var(--success, #16a34a)';
 
-    if (!currentEmployees.length) {
-      contentEl.innerHTML =
-        '<div class="state-box">' +
-          '<div class="icon">👥</div>' +
-          '<h3>Keine Mitarbeiter für Überstunden-Tracking</h3>' +
-          '<p>Aktiviere das Tracking für <a href="employees.html">Mitarbeiter</a> indem du das Sollstunden-Feld setzt.</p>' +
-        '</div>';
+    summaryEl.innerHTML =
+      '<div class="card" style="padding:16px 20px">' +
+        '<div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">' +
+          '<div style="font-size:13px;color:var(--text-secondary);font-weight:500">Urlaubsanspruch ' + currentYear + '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            '<input type="number" id="entitlementInput" min="0" max="60" step="1"' +
+              ' value="' + (entitlement != null ? entitlement : '') + '"' +
+              ' placeholder="—"' +
+              ' data-emp="' + empId + '"' +
+              ' style="width:60px;text-align:center;padding:4px 8px;border:1px solid var(--border);' +
+                       'border-radius:6px;font-size:14px;font-weight:600;background:var(--surface)">' +
+            '<span style="font-size:13px;color:var(--text-muted)">Tage gesamt</span>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:6px">' +
+            '<span style="font-size:22px;font-weight:700;color:var(--primary)">' + usedDays + '</span>' +
+            '<span style="font-size:13px;color:var(--text-muted)">Tage genommen</span>' +
+          '</div>' +
+          (remaining != null
+            ? '<div style="display:flex;align-items:center;gap:6px">' +
+                '<span style="font-size:22px;font-weight:700;color:' + remColor + '">' + remaining + '</span>' +
+                '<span style="font-size:13px;color:var(--text-muted)">Tage verbleibend</span>' +
+              '</div>'
+            : '') +
+        '</div>' +
+      '</div>';
+
+    var entInput = document.getElementById('entitlementInput');
+    if (entInput) {
+      entInput.addEventListener('change', function () {
+        var days = Math.max(0, parseInt(entInput.value, 10) || 0);
+        entInput.value = days || '';
+        saveEntitlement(entInput.getAttribute('data-emp'), currentYear, days);
+      });
+    }
+
+    summaryEl.classList.remove('hidden');
+  }
+
+  // ── Main render ───────────────────────────────────────────────────────
+  function render() {
+    var empId = empSel.value;
+    if (!empId) {
+      contentEl.innerHTML = '';
+      summaryEl.classList.add('hidden');
       return;
     }
 
-    var html = '';
+    var emp = allEmployees.find(function (e) { return e.id === empId; });
+    if (!emp) return;
 
-    currentEmployees.forEach(function (emp) {
-      var empUtil = currentUtilMap[emp.id] || {};
-      var empVac  = currentVacMap[emp.id]  || {};
+    var ym       = window.currentYearMonth();
+    var maxMonth = (currentYear === ym.year) ? ym.month : 12;
+    var empUtil  = utilMap[empId]  || {};
+    var empVac   = vacMap[empId]   || {};
 
-      var totalTracked = 0, totalTarget = 0, totalAdj = 0, totalOT = 0, totalVac = 0;
-      var rowsHtml = '';
+    var totalTracked = 0, totalTarget = 0, totalAdj = 0, totalOT = 0, totalVac = 0;
+    var rowsHtml = '';
 
-      for (var m = 1; m <= maxMonth; m++) {
-        var tracked   = empUtil[m] || 0;
-        var vacDays   = empVac[m]  || 0;
-        var target    = getSollHours(currentYear, m, currentHolidays);
-        var adjTarget = Math.max(0, target - vacDays * HOURS_PER_DAY);
-        var overtime  = Math.max(0, tracked - adjTarget);
+    for (var m = 1; m <= maxMonth; m++) {
+      var tracked   = empUtil[m] || 0;
+      var vacDays   = empVac[m]  || 0;
+      var target    = getSollHours(currentYear, m, currentHolidays);
+      var adjTarget = Math.max(0, target - vacDays * HOURS_PER_DAY);
+      var overtime  = Math.max(0, tracked - adjTarget);
 
-        totalTracked += tracked;
-        totalTarget  += target;
-        totalAdj     += adjTarget;
-        totalOT      += overtime;
-        totalVac     += vacDays;
+      totalTracked += tracked;
+      totalTarget  += target;
+      totalAdj     += adjTarget;
+      totalOT      += overtime;
+      totalVac     += vacDays;
 
-        var isCurrent = (currentYear === ym.year && m === ym.month);
-        var rowCls    = isCurrent ? ' class="month-current"' : '';
+      var isCurrent = (currentYear === ym.year && m === ym.month);
+      var rowCls    = isCurrent ? ' class="month-current"' : '';
 
-        rowsHtml +=
-          '<tr' + rowCls + '>' +
-            '<td>' + window.MONTHS_DE[m - 1] + '</td>' +
-            '<td class="right" style="font-variant-numeric:tabular-nums">' + window.fmtHours(target) + '</td>' +
-            '<td class="center">' +
-              '<input type="number" min="0" max="31" step="1"' +
-                ' data-emp="' + emp.id + '" data-month="' + m + '"' +
-                ' value="' + (vacDays || '') + '"' +
-                ' placeholder="0"' +
-                ' style="width:56px;text-align:center;padding:3px 6px;border:1px solid var(--border);' +
-                         'border-radius:4px;font-size:13px;background:var(--surface)">' +
-            '</td>' +
-            '<td class="right" id="adj-' + emp.id + '-' + m + '" style="font-variant-numeric:tabular-nums">' + window.fmtHours(adjTarget) + '</td>' +
-            '<td class="right" style="font-variant-numeric:tabular-nums">' +
-              (tracked > 0 ? window.fmtHours(tracked) : '<span style="color:var(--text-muted)">—</span>') +
-            '</td>' +
-            '<td class="right" id="ot-' + emp.id + '-' + m + '"' +
-              (overtime > 0 ? ' style="color:#dc2626;font-weight:700"' : ' style="color:var(--text-muted)"') + '>' +
-              (overtime > 0 ? window.fmtHours(overtime) : '—') +
-            '</td>' +
-          '</tr>';
-      }
+      rowsHtml +=
+        '<tr' + rowCls + '>' +
+          '<td>' + window.MONTHS_DE[m - 1] + '</td>' +
+          '<td class="right" style="color:var(--text-secondary)">' + window.fmtHours(target) + '</td>' +
+          '<td class="center">' +
+            '<input type="number" min="0" max="31" step="1"' +
+              ' data-month="' + m + '" data-emp="' + empId + '"' +
+              ' value="' + (vacDays || '') + '" placeholder="—"' +
+              ' style="width:52px;text-align:center;padding:3px 6px;border:1px solid var(--border);' +
+                       'border-radius:4px;font-size:13px;background:var(--surface)">' +
+          '</td>' +
+          '<td class="right" id="adj-' + m + '" style="color:var(--text-secondary)">' + window.fmtHours(adjTarget) + '</td>' +
+          '<td class="right" style="font-weight:500">' +
+            (tracked > 0 ? window.fmtHours(tracked) : '<span style="color:var(--text-muted)">—</span>') +
+          '</td>' +
+          '<td class="right" id="ot-' + m + '"' +
+            (overtime > 0
+              ? ' style="color:#dc2626;font-weight:700">' + window.fmtHours(overtime)
+              : ' style="color:var(--text-muted)">—') +
+          '</td>' +
+        '</tr>';
+    }
 
-      html +=
-        '<div class="card" style="margin-bottom:20px">' +
-          '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;' +
-               'padding-bottom:12px;border-bottom:1px solid var(--border)">' +
-            '<span style="font-size:16px;font-weight:700">' + emp.name + '</span>' +
-            '<span class="role-badge ' + window.getRoleCls(emp.role) + '">' +
-              window.getRoleShort(emp.role) +
-            '</span>' +
-          '</div>' +
-          '<div class="table-wrap">' +
-            '<table>' +
-              '<thead>' +
-                '<tr>' +
-                  '<th>Monat</th>' +
-                  '<th class="right">Soll (h)</th>' +
-                  '<th class="center">Urlaub (Tage)</th>' +
-                  '<th class="right">Angepasstes Soll</th>' +
-                  '<th class="right">Geleistet</th>' +
-                  '<th class="right">Überstunden</th>' +
-                '</tr>' +
-              '</thead>' +
-              '<tbody>' + rowsHtml + '</tbody>' +
-              '<tfoot>' +
-                '<tr id="foot-' + emp.id + '" style="font-weight:700;border-top:2px solid var(--border)">' +
-                  '<td>Gesamt</td>' +
-                  '<td class="right" style="font-variant-numeric:tabular-nums">' + window.fmtHours(totalTarget) + '</td>' +
-                  '<td class="center" style="color:' + (totalVac > 0 ? 'var(--primary)' : 'var(--text-muted)') + '">' +
-                    (totalVac > 0 ? totalVac : '—') +
-                  '</td>' +
-                  '<td class="right" style="font-variant-numeric:tabular-nums">' + window.fmtHours(totalAdj) + '</td>' +
-                  '<td class="right" style="font-variant-numeric:tabular-nums">' +
-                    (totalTracked > 0 ? window.fmtHours(totalTracked) : '—') +
-                  '</td>' +
-                  '<td class="right"' +
-                    (totalOT > 0 ? ' style="color:#dc2626;font-weight:700"' : ' style="color:var(--text-muted)"') + '>' +
-                    (totalOT > 0 ? window.fmtHours(totalOT) : '—') +
-                  '</td>' +
-                '</tr>' +
-              '</tfoot>' +
-            '</table>' +
-          '</div>' +
-        '</div>';
-    });
+    contentEl.innerHTML =
+      '<div class="card">' +
+        '<div class="table-wrap">' +
+          '<table style="table-layout:fixed;width:100%;min-width:640px">' +
+            '<thead>' +
+              '<tr>' +
+                '<th style="width:120px">Monat</th>' +
+                '<th class="right" style="width:130px">Soll (h)</th>' +
+                '<th class="center" style="width:130px">Urlaub (Tage)</th>' +
+                '<th class="right" style="width:160px">Angepasstes Soll</th>' +
+                '<th class="right" style="width:130px">Geleistet</th>' +
+                '<th class="right" style="width:130px">Überstunden</th>' +
+              '</tr>' +
+            '</thead>' +
+            '<tbody>' + rowsHtml + '</tbody>' +
+            '<tfoot>' +
+              '<tr id="tfoot-row" style="font-weight:700;border-top:2px solid var(--border)">' +
+                '<td>Gesamt</td>' +
+                '<td class="right">' + window.fmtHours(totalTarget) + '</td>' +
+                '<td class="center" style="color:' + (totalVac > 0 ? 'var(--primary)' : 'var(--text-muted)') + '">' +
+                  (totalVac > 0 ? totalVac : '—') +
+                '</td>' +
+                '<td class="right">' + window.fmtHours(totalAdj) + '</td>' +
+                '<td class="right">' + (totalTracked > 0 ? window.fmtHours(totalTracked) : '—') + '</td>' +
+                '<td class="right"' +
+                  (totalOT > 0
+                    ? ' style="color:#dc2626">' + window.fmtHours(totalOT)
+                    : ' style="color:var(--text-muted)">—') +
+                '</td>' +
+              '</tr>' +
+            '</tfoot>' +
+          '</table>' +
+        '</div>' +
+      '</div>';
 
-    contentEl.innerHTML = html;
-
-    // Attach input listeners for vacation cells
-    contentEl.querySelectorAll('input[data-emp]').forEach(function (inp) {
+    // Vacation input listeners
+    contentEl.querySelectorAll('input[data-month]').forEach(function (inp) {
       inp.addEventListener('change', function () {
-        var empId = inp.getAttribute('data-emp');
-        var month = parseInt(inp.getAttribute('data-month'), 10);
         var days  = Math.max(0, parseInt(inp.value, 10) || 0);
         inp.value = days || '';
-        saveVacation(empId, month, days);
+        saveVacation(inp.getAttribute('data-emp'), parseInt(inp.getAttribute('data-month'), 10), days);
       });
     });
+
+    // Render summary bar
+    var entitlement = vacEntitlements[entKey(empId, currentYear)];
+    if (entitlement == null && emp.monthly_target_hours != null) {
+      entitlement = emp.monthly_target_hours;
+    }
+    renderSummary(empId, totalVac, entitlement);
   }
 
   // ── Boot ──────────────────────────────────────────────────────────────
@@ -316,9 +369,44 @@
     setupHint.classList.remove('hidden');
   } else {
     window.settingsReady.then(function () {
-      loadData();
+      Promise.all([
+        window.db.employees.listActive(),
+        window.db.settings.getAll(),
+      ]).then(function (results) {
+        allEmployees = results[0].filter(function (e) {
+          return e.monthly_target_hours != null && e.active !== false;
+        });
+
+        // Parse saved entitlements from app_settings
+        (results[1] || []).forEach(function (s) {
+          if (s.key && s.key.indexOf('vac_ent_') === 0) {
+            vacEntitlements[s.key] = parseInt(s.value, 10) || 0;
+          }
+        });
+
+        populateDropdown(allEmployees);
+
+        if (allEmployees.length > 0) {
+          loadData();
+        } else {
+          contentEl.innerHTML =
+            '<div class="state-box">' +
+              '<div class="icon">👥</div>' +
+              '<h3>Keine Mitarbeiter für Überstunden-Tracking</h3>' +
+              '<p>Setze bei <a href="employees.html">Mitarbeitern</a> das Feld "Urlaubsanspruch", um sie hier einzuschließen.</p>' +
+            '</div>';
+        }
+      }).catch(function (e) {
+        showError('Fehler beim Laden: ' + e.message);
+      });
     });
   }
+
   loadBtn.addEventListener('click', loadData);
+  empSel.addEventListener('change', function () {
+    if (utilMap && Object.keys(utilMap).length > 0) render();
+    else loadData();
+  });
+  yearSel.addEventListener('change', loadData);
 
 })();
