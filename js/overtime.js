@@ -66,12 +66,23 @@
   // ── State ─────────────────────────────────────────────────────────────
   var allEmployees    = [];
   var vacEntitlements = {}; // key: "vac_ent_{empId}_{year}" → days
+  var abbauMap        = {}; // key: "ot_abbau_{empId}_{year}_{month}" → hours
   var currentYear     = null;
   var currentHolidays = {};
   var utilMap         = {}; // { empId: { month: hours } }
   var vacMap          = {}; // { empId: { month: days } }
 
-  function entKey(empId, year) { return 'vac_ent_' + empId + '_' + year; }
+  function entKey(empId, year)         { return 'vac_ent_' + empId + '_' + year; }
+  function abbauKey(empId, year, month) { return 'ot_abbau_' + empId + '_' + year + '_' + month; }
+
+  function getAbbau(empId, month) {
+    return abbauMap[abbauKey(empId, currentYear, month)] || 0;
+  }
+  function setAbbau(empId, month, hours) {
+    var k = abbauKey(empId, currentYear, month);
+    abbauMap[k] = hours;
+    try { localStorage.setItem(k, String(hours)); } catch (e) {}
+  }
 
   // ── Init year select ──────────────────────────────────────────────────
   (function () {
@@ -164,9 +175,12 @@
 
     var totalVac = 0, totalOT = 0, totalAdj = 0, totalTarget = 0, totalTracked = 0;
 
+    var totalAbbau = 0;
+
     for (var m = 1; m <= maxMonth; m++) {
       var tracked   = empUtil[m] || 0;
       var vacDays   = empVac[m]  || 0;
+      var abbau     = getAbbau(empId, m);
       var target    = getSollHours(currentYear, m, currentHolidays);
       var adjTarget = Math.max(0, target - vacDays * HOURS_PER_DAY);
       var overtime  = Math.max(0, tracked - adjTarget);
@@ -176,30 +190,45 @@
       totalAdj     += adjTarget;
       totalOT      += overtime;
       totalVac     += vacDays;
+      totalAbbau   += abbau;
 
       var adjCell = document.getElementById('adj-' + m);
       if (adjCell) adjCell.textContent = window.fmtHours(adjTarget);
 
       var otCell = document.getElementById('ot-' + m);
       if (otCell) {
-        otCell.textContent   = overtime > 0 ? window.fmtHours(overtime) : '—';
-        otCell.style.color   = overtime > 0 ? '#dc2626' : 'var(--text-muted)';
+        otCell.textContent      = overtime > 0 ? window.fmtHours(overtime) : '—';
+        otCell.style.color      = overtime > 0 ? '#dc2626' : 'var(--text-muted)';
         otCell.style.fontWeight = overtime > 0 ? '700' : '';
       }
+
+      var saldo = overtime - abbau;
+      var saldoCell = document.getElementById('saldo-' + m);
+      if (saldoCell) {
+        saldoCell.textContent     = saldo > 0 ? window.fmtHours(saldo) : saldo < 0 ? '-' + window.fmtHours(-saldo) : '—';
+        saldoCell.style.color     = saldo > 0 ? '#dc2626' : saldo < 0 ? '#16a34a' : 'var(--text-muted)';
+        saldoCell.style.fontWeight = saldo !== 0 ? '700' : '';
+      }
     }
+
+    var netOT = totalOT - totalAbbau;
 
     // Update footer
     var foot = document.getElementById('tfoot-row');
     if (foot) {
       foot.cells[1].textContent = window.fmtHours(totalTarget);
-      foot.cells[2].textContent  = totalVac > 0 ? totalVac : '—';
-      foot.cells[2].style.color  = totalVac > 0 ? 'var(--primary)' : 'var(--text-muted)';
+      foot.cells[2].textContent     = totalVac > 0 ? totalVac : '—';
+      foot.cells[2].style.color     = totalVac > 0 ? 'var(--primary)' : 'var(--text-muted)';
       foot.cells[2].style.textAlign = 'right';
       foot.cells[3].textContent = window.fmtHours(totalAdj);
-      foot.cells[4].textContent = totalTracked > 0 ? window.fmtHours(totalTracked) : '—';
-      foot.cells[5].textContent = totalOT > 0 ? window.fmtHours(totalOT) : '—';
-      foot.cells[5].style.color = totalOT > 0 ? '#dc2626' : 'var(--text-muted)';
-      foot.cells[5].style.fontWeight = totalOT > 0 ? '700' : '';
+      foot.cells[4].textContent     = totalOT > 0 ? window.fmtHours(totalOT) : '—';
+      foot.cells[4].style.color     = totalOT > 0 ? '#dc2626' : 'var(--text-muted)';
+      foot.cells[4].style.fontWeight = totalOT > 0 ? '700' : '';
+      foot.cells[5].textContent     = totalAbbau > 0 ? window.fmtHours(totalAbbau) : '—';
+      foot.cells[5].style.color     = totalAbbau > 0 ? 'var(--primary)' : 'var(--text-muted)';
+      foot.cells[6].textContent     = netOT > 0 ? window.fmtHours(netOT) : (netOT < 0 ? '-' + window.fmtHours(-netOT) : '—');
+      foot.cells[6].style.color     = netOT > 0 ? '#dc2626' : (netOT < 0 ? '#16a34a' : 'var(--text-muted)');
+      foot.cells[6].style.fontWeight = netOT !== 0 ? '700' : '';
     }
 
     // Update summary bar
@@ -271,60 +300,75 @@
     var empUtil  = utilMap[empId]  || {};
     var empVac   = vacMap[empId]   || {};
 
-    var totalTracked = 0, totalTarget = 0, totalAdj = 0, totalOT = 0, totalVac = 0;
+    var totalTracked = 0, totalTarget = 0, totalAdj = 0, totalOT = 0, totalVac = 0, totalAbbau = 0;
     var rowsHtml = '';
 
     for (var m = 1; m <= maxMonth; m++) {
       var tracked   = empUtil[m] || 0;
       var vacDays   = empVac[m]  || 0;
+      var abbau     = getAbbau(empId, m);
       var target    = getSollHours(currentYear, m, currentHolidays);
       var adjTarget = Math.max(0, target - vacDays * HOURS_PER_DAY);
       var overtime  = Math.max(0, tracked - adjTarget);
+      var saldo     = overtime - abbau;
 
       totalTracked += tracked;
       totalTarget  += target;
       totalAdj     += adjTarget;
       totalOT      += overtime;
       totalVac     += vacDays;
+      totalAbbau   += abbau;
 
       var isCurrent = (currentYear === ym.year && m === ym.month);
       var rowCls    = isCurrent ? ' class="month-current"' : '';
+
+      var inputStyle = 'width:52px;text-align:center;padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface)';
 
       rowsHtml +=
         '<tr' + rowCls + '>' +
           '<td>' + window.MONTHS_DE[m - 1] + '</td>' +
           '<td class="right" style="color:var(--text-secondary)">' + window.fmtHours(target) + '</td>' +
           '<td class="center">' +
-            '<input type="number" min="0" max="31" step="1"' +
+            '<input type="number" min="0" max="31" step="1" data-type="vac"' +
               ' data-month="' + m + '" data-emp="' + empId + '"' +
-              ' value="' + (vacDays || '') + '" placeholder="—"' +
-              ' style="width:52px;text-align:center;padding:3px 6px;border:1px solid var(--border);' +
-                       'border-radius:4px;font-size:13px;background:var(--surface)">' +
+              ' value="' + (vacDays || '') + '" placeholder="—" style="' + inputStyle + '">' +
           '</td>' +
           '<td class="right" id="adj-' + m + '" style="color:var(--text-secondary)">' + window.fmtHours(adjTarget) + '</td>' +
-          '<td class="right" style="font-weight:500">' +
-            (tracked > 0 ? window.fmtHours(tracked) : '<span style="color:var(--text-muted)">—</span>') +
-          '</td>' +
           '<td class="right" id="ot-' + m + '"' +
             (overtime > 0
               ? ' style="color:#dc2626;font-weight:700">' + window.fmtHours(overtime)
               : ' style="color:var(--text-muted)">—') +
           '</td>' +
+          '<td class="center">' +
+            '<input type="number" min="0" step="0.25" data-type="abbau"' +
+              ' data-month="' + m + '" data-emp="' + empId + '"' +
+              ' value="' + (abbau || '') + '" placeholder="—" style="' + inputStyle + '">' +
+          '</td>' +
+          '<td class="right" id="saldo-' + m + '"' +
+            (saldo > 0
+              ? ' style="color:#dc2626;font-weight:700">' + window.fmtHours(saldo)
+              : saldo < 0
+                ? ' style="color:#16a34a;font-weight:700">-' + window.fmtHours(-saldo)
+                : ' style="color:var(--text-muted)">—') +
+          '</td>' +
         '</tr>';
     }
+
+    var netOT = totalOT - totalAbbau;
 
     contentEl.innerHTML =
       '<div class="card">' +
         '<div class="table-wrap">' +
-          '<table style="table-layout:fixed;width:100%;min-width:640px">' +
+          '<table style="table-layout:fixed;width:100%;min-width:710px">' +
             '<thead>' +
               '<tr>' +
-                '<th style="width:120px">Monat</th>' +
-                '<th class="right" style="width:130px">Soll (h)</th>' +
-                '<th class="center" style="width:130px">Urlaub (Tage)</th>' +
-                '<th class="right" style="width:160px">Angepasstes Soll</th>' +
-                '<th class="right" style="width:130px">Geleistet</th>' +
-                '<th class="right" style="width:130px">Überstunden</th>' +
+                '<th style="width:110px">Monat</th>' +
+                '<th class="right" style="width:110px">Soll (h)</th>' +
+                '<th class="center" style="width:110px">Urlaub (Tage)</th>' +
+                '<th class="right" style="width:140px">Angepasstes Soll</th>' +
+                '<th class="right" style="width:110px">Überstunden</th>' +
+                '<th class="center" style="width:100px">Abbau (h)</th>' +
+                '<th class="right" style="width:100px">Saldo</th>' +
               '</tr>' +
             '</thead>' +
             '<tbody>' + rowsHtml + '</tbody>' +
@@ -336,11 +380,16 @@
                   (totalVac > 0 ? totalVac : '—') +
                 '</td>' +
                 '<td class="right">' + window.fmtHours(totalAdj) + '</td>' +
-                '<td class="right">' + (totalTracked > 0 ? window.fmtHours(totalTracked) : '—') + '</td>' +
+                '<td class="right"' + (totalOT > 0 ? ' style="color:#dc2626">' + window.fmtHours(totalOT) : ' style="color:var(--text-muted)">—') + '</td>' +
+                '<td class="right" style="color:' + (totalAbbau > 0 ? 'var(--primary)' : 'var(--text-muted)') + '">' +
+                  (totalAbbau > 0 ? window.fmtHours(totalAbbau) : '—') +
+                '</td>' +
                 '<td class="right"' +
-                  (totalOT > 0
-                    ? ' style="color:#dc2626">' + window.fmtHours(totalOT)
-                    : ' style="color:var(--text-muted)">—') +
+                  (netOT > 0
+                    ? ' style="color:#dc2626;font-weight:700">' + window.fmtHours(netOT)
+                    : netOT < 0
+                      ? ' style="color:#16a34a;font-weight:700">-' + window.fmtHours(-netOT)
+                      : ' style="color:var(--text-muted)">—') +
                 '</td>' +
               '</tr>' +
             '</tfoot>' +
@@ -348,12 +397,22 @@
         '</div>' +
       '</div>';
 
-    // Vacation input listeners
-    contentEl.querySelectorAll('input[data-month]').forEach(function (inp) {
+    // Input listeners
+    contentEl.querySelectorAll('input[data-type]').forEach(function (inp) {
       inp.addEventListener('change', function () {
-        var days  = Math.max(0, parseInt(inp.value, 10) || 0);
-        inp.value = days || '';
-        saveVacation(inp.getAttribute('data-emp'), parseInt(inp.getAttribute('data-month'), 10), days);
+        var type  = inp.getAttribute('data-type');
+        var empId = inp.getAttribute('data-emp');
+        var month = parseInt(inp.getAttribute('data-month'), 10);
+        if (type === 'vac') {
+          var days = Math.max(0, parseInt(inp.value, 10) || 0);
+          inp.value = days || '';
+          saveVacation(empId, month, days);
+        } else {
+          var hours = Math.max(0, parseFloat(inp.value) || 0);
+          inp.value = hours || '';
+          setAbbau(empId, month, hours);
+          rerenderDynamic(empId);
+        }
       });
     });
 
@@ -375,12 +434,15 @@
           return e.monthly_target_hours != null && e.active !== false;
         });
 
-        // Load entitlements from localStorage
+        // Load entitlements + abbau from localStorage
         try {
           for (var i = 0; i < localStorage.length; i++) {
             var lsKey = localStorage.key(i);
-            if (lsKey && lsKey.indexOf('ot_vac_ent_') === 0) {
+            if (!lsKey) continue;
+            if (lsKey.indexOf('ot_vac_ent_') === 0) {
               vacEntitlements[lsKey.slice(3)] = parseInt(localStorage.getItem(lsKey), 10) || 0;
+            } else if (lsKey.indexOf('ot_abbau_') === 0) {
+              abbauMap[lsKey] = parseFloat(localStorage.getItem(lsKey)) || 0;
             }
           }
         } catch (e) {}
