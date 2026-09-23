@@ -217,9 +217,8 @@
     var foot = document.getElementById('tfoot-row');
     if (foot) {
       foot.cells[1].textContent = window.fmtHours(totalTarget);
-      foot.cells[2].textContent     = totalVac > 0 ? totalVac : '—';
-      foot.cells[2].style.color     = totalVac > 0 ? 'var(--primary)' : 'var(--text-muted)';
-      foot.cells[2].style.textAlign = 'right';
+      foot.cells[2].textContent = totalVac > 0 ? totalVac : '—';
+      foot.cells[2].style.color = totalVac > 0 ? 'var(--primary)' : 'var(--text-muted)';
       foot.cells[3].textContent = window.fmtHours(totalAdj);
       foot.cells[4].textContent     = totalOT > 0 ? window.fmtHours(totalOT) : '—';
       foot.cells[4].style.color     = totalOT > 0 ? '#dc2626' : 'var(--text-muted)';
@@ -376,12 +375,12 @@
               '<tr id="tfoot-row" style="font-weight:700;border-top:2px solid var(--border)">' +
                 '<td>Gesamt</td>' +
                 '<td class="right">' + window.fmtHours(totalTarget) + '</td>' +
-                '<td class="right" style="color:' + (totalVac > 0 ? 'var(--primary)' : 'var(--text-muted)') + '">' +
+                '<td class="center" style="color:' + (totalVac > 0 ? 'var(--primary)' : 'var(--text-muted)') + '">' +
                   (totalVac > 0 ? totalVac : '—') +
                 '</td>' +
                 '<td class="right">' + window.fmtHours(totalAdj) + '</td>' +
                 '<td class="right"' + (totalOT > 0 ? ' style="color:#dc2626">' + window.fmtHours(totalOT) : ' style="color:var(--text-muted)">—') + '</td>' +
-                '<td class="right" style="color:' + (totalAbbau > 0 ? 'var(--primary)' : 'var(--text-muted)') + '">' +
+                '<td class="center" style="color:' + (totalAbbau > 0 ? 'var(--primary)' : 'var(--text-muted)') + '">' +
                   (totalAbbau > 0 ? window.fmtHours(totalAbbau) : '—') +
                 '</td>' +
                 '<td class="right"' +
