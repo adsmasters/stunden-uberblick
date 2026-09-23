@@ -151,7 +151,7 @@
   function saveEntitlement(empId, year, days) {
     var key = entKey(empId, year);
     vacEntitlements[key] = days;
-    window.db.settings.set(key, String(days)).catch(function () {});
+    try { localStorage.setItem('ot_' + key, String(days)); } catch (e) {}
     rerenderDynamic(empId);
   }
 
@@ -369,20 +369,20 @@
     setupHint.classList.remove('hidden');
   } else {
     window.settingsReady.then(function () {
-      Promise.all([
-        window.db.employees.listActive(),
-        window.db.settings.getAll(),
-      ]).then(function (results) {
-        allEmployees = results[0].filter(function (e) {
+      window.db.employees.listActive().then(function (employees) {
+        allEmployees = employees.filter(function (e) {
           return e.monthly_target_hours != null && e.active !== false;
         });
 
-        // Parse saved entitlements from app_settings
-        (results[1] || []).forEach(function (s) {
-          if (s.key && s.key.indexOf('vac_ent_') === 0) {
-            vacEntitlements[s.key] = parseInt(s.value, 10) || 0;
+        // Load entitlements from localStorage
+        try {
+          for (var i = 0; i < localStorage.length; i++) {
+            var lsKey = localStorage.key(i);
+            if (lsKey && lsKey.indexOf('ot_vac_ent_') === 0) {
+              vacEntitlements[lsKey.slice(3)] = parseInt(localStorage.getItem(lsKey), 10) || 0;
+            }
           }
-        });
+        } catch (e) {}
 
         populateDropdown(allEmployees);
 
