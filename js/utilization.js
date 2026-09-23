@@ -190,6 +190,25 @@
         }
       });
 
+      // avg hours per employee per hourly client (last 3 months with data)
+      var hourlyAvgByEmpClient = {};
+      clientsData.forEach(function (c) {
+        if (!c.is_hourly) return;
+        employees.forEach(function (emp) {
+          if (c.am_employee_id !== emp.id && c.adv_employee_id !== emp.id) return;
+          var recent = [];
+          for (var fm2 = ym.month; fm2 >= 1 && recent.length < 3; fm2--) {
+            var h = ((clientBreakdown[emp.id] || {})[fm2] || {})[c.id] || 0;
+            if (h > 0) recent.push(h);
+          }
+          if (recent.length > 0) {
+            if (!hourlyAvgByEmpClient[emp.id]) hourlyAvgByEmpClient[emp.id] = {};
+            hourlyAvgByEmpClient[emp.id][c.id] =
+              recent.reduce(function (a, b) { return a + b; }, 0) / recent.length;
+          }
+        });
+      });
+
       if (year === ym.year && ym.month < 12) {
         for (var fm = ym.month + 1; fm <= 12; fm++) {
           employees.forEach(function (emp) {
@@ -210,16 +229,21 @@
                 var peY = pe.getUTCFullYear(), peM = pe.getUTCMonth() + 1;
                 if (year > peY || (year === peY && fm > peM)) return;
               }
-              var useBudget2 = c.budget_switch
-                ? (function () {
-                    var bs = new Date(c.budget_switch);
-                    return year > bs.getUTCFullYear() || (year === bs.getUTCFullYear() && fm > bs.getUTCMonth() + 1);
-                  })()
-                : false;
-              var amBdg  = useBudget2 ? (c.am_budget2  || c.am_budget)  : c.am_budget;
-              var advBdg = useBudget2 ? (c.adv_budget2 || c.adv_budget) : c.adv_budget;
-              if (c.am_employee_id  === emp.id && amBdg)  budgetSum += amBdg;
-              if (c.adv_employee_id === emp.id && advBdg) budgetSum += advBdg;
+              if (c.is_hourly) {
+                // Aufwand-Kunde: Ø letzte 3 Monate pro Mitarbeiter
+                budgetSum += ((hourlyAvgByEmpClient[emp.id] || {})[c.id] || 0);
+              } else {
+                var useBudget2 = c.budget_switch
+                  ? (function () {
+                      var bs = new Date(c.budget_switch);
+                      return year > bs.getUTCFullYear() || (year === bs.getUTCFullYear() && fm > bs.getUTCMonth() + 1);
+                    })()
+                  : false;
+                var amBdg  = useBudget2 ? (c.am_budget2  || c.am_budget)  : c.am_budget;
+                var advBdg = useBudget2 ? (c.adv_budget2 || c.adv_budget) : c.adv_budget;
+                if (c.am_employee_id  === emp.id && amBdg)  budgetSum += amBdg;
+                if (c.adv_employee_id === emp.id && advBdg) budgetSum += advBdg;
+              }
             });
             var base = budgetSum > 0 ? budgetSum : (avgByEmp[emp.id] || 0);
             if (base > 0) {
