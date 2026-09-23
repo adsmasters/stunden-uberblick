@@ -193,25 +193,10 @@
       if (year === ym.year && ym.month < 12) {
         for (var fm = ym.month + 1; fm <= 12; fm++) {
           employees.forEach(function (emp) {
-            var budgetSum = 0;
-            clientsData.forEach(function (c) {
-              if (c.contract_start) {
-                var cs = new Date(c.contract_start);
-                var csY = cs.getUTCFullYear(), csM = cs.getUTCMonth() + 1;
-                if (csY > year || (csY === year && fm < csM)) return;
-              }
-              if (c.is_project && c.project_end) {
-                var pe = new Date(c.project_end);
-                var peY = pe.getUTCFullYear(), peM = pe.getUTCMonth() + 1;
-                if (year > peY || (year === peY && fm > peM)) return;
-              }
-              if (c.am_employee_id  === emp.id && c.am_budget)  budgetSum += c.am_budget;
-              if (c.adv_employee_id === emp.id && c.adv_budget) budgetSum += c.adv_budget;
-            });
-            var clientHours = budgetSum > 0 ? budgetSum : (avgByEmp[emp.id] || 0);
-            if (clientHours > 0) {
+            var planned = (entriesPerEmp[emp.id] || {})[fm] || 0;
+            if (planned > 0) {
               if (!forecastByEmp[emp.id]) forecastByEmp[emp.id] = {};
-              forecastByEmp[emp.id][fm] = Math.round(clientHours * 4) / 4;
+              forecastByEmp[emp.id][fm] = planned;
             }
           });
         }
@@ -693,7 +678,7 @@
     var hasForecast = Object.keys(forecastByEmp).length > 0;
     if (hasForecast) {
       html += '<div style="margin-top:10px;font-size:11px;color:var(--text-muted);padding:0 4px">' +
-        '<span style="opacity:.5;font-style:italic">~ Prognose</span> · Summe Kundenbudgets (AM+ADV) + 15% der verfügbaren Stunden · gedimmte Zellen = Schätzwerte</div>';
+        '<span style="opacity:.5;font-style:italic">~ Prognose</span> · Geplante Stunden (Monatsübersicht) + 15% intern · gedimmte Zellen = Schätzwerte</div>';
     }
 
     tableWrap.innerHTML = html;
