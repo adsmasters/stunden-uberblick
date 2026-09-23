@@ -14,6 +14,7 @@
             case 'clockify_key':            localStorage.setItem('clockifyKey',           row.value); break;
             case 'clockify_workspace_id':   localStorage.setItem('clockifyWorkspaceId',   row.value); break;
             case 'clockify_workspace_name': localStorage.setItem('clockifyWorkspaceName', row.value); break;
+            case 'google_calendar_api_key': localStorage.setItem('googleCalendarApiKey',  row.value); break;
           }
         });
       })

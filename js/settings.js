@@ -118,6 +118,62 @@
       });
   });
 
+  // ── Google Calendar section ──────────────────────────────────────────
+  var googleCalendarKeyInput    = document.getElementById('googleCalendarKey');
+  var googleCalendarSaveBtn     = document.getElementById('googleCalendarSaveBtn');
+  var googleCalendarSaveStatus  = document.getElementById('googleCalendarSaveStatus');
+  var calendarStatusEl          = document.getElementById('calendarStatus');
+
+  if (googleCalendarKeyInput) {
+    googleCalendarKeyInput.value = localStorage.getItem('googleCalendarApiKey') || '';
+    if (localStorage.getItem('googleCalendarApiKey')) {
+      calendarStatusEl.innerHTML = '<span class="badge badge-ok">✓ Key hinterlegt</span>';
+    }
+
+    function setCalendarStatus(msg, type) {
+      googleCalendarSaveStatus.textContent = msg;
+      googleCalendarSaveStatus.style.color =
+        type === 'success' ? 'var(--success)' :
+        type === 'error'   ? 'var(--danger)'  : 'var(--text-secondary)';
+    }
+
+    googleCalendarSaveBtn.addEventListener('click', function () {
+      var key = googleCalendarKeyInput.value.trim();
+      if (!key) { setCalendarStatus('Bitte API Key eingeben.', 'error'); return; }
+      googleCalendarSaveBtn.disabled = true;
+      googleCalendarSaveBtn.textContent = 'Teste Verbindung…';
+      setCalendarStatus('', '');
+
+      var CALENDAR_ID = 'c_ccc8810b3cb48e05f29dede0af9a2d9dd2c3f9ee8f39c4ae9945a761e7cd6d6b@group.calendar.google.com';
+      var now = new Date();
+      var testUrl = 'https://www.googleapis.com/calendar/v3/calendars/' +
+        encodeURIComponent(CALENDAR_ID) +
+        '/events?key=' + encodeURIComponent(key) +
+        '&timeMin=' + encodeURIComponent(now.toISOString()) +
+        '&maxResults=1&singleEvents=true';
+
+      fetch(testUrl)
+        .then(function (r) {
+          if (!r.ok) return r.json().then(function(d) { throw new Error((d.error && d.error.message) || ('HTTP ' + r.status)); });
+          return r.json();
+        })
+        .then(function () {
+          localStorage.setItem('googleCalendarApiKey', key);
+          setCalendarStatus('Verbindung erfolgreich ✓', 'success');
+          calendarStatusEl.innerHTML = '<span class="badge badge-ok">✓ Verbunden</span>';
+          window.db.settings.set('google_calendar_api_key', key).catch(function () {});
+        })
+        .catch(function (e) {
+          setCalendarStatus('Fehler: ' + e.message, 'error');
+          calendarStatusEl.innerHTML = '<span class="badge badge-over">✗ Fehler</span>';
+        })
+        .finally(function () {
+          googleCalendarSaveBtn.disabled = false;
+          googleCalendarSaveBtn.textContent = 'API Key speichern & testen';
+        });
+    });
+  }
+
   // ── LexOffice section ────────────────────────────────────────────────
   var lexofficeKeyInput   = document.getElementById('lexofficeKey');
   var lexofficeSaveBtn    = document.getElementById('lexofficeSaveBtn');

@@ -42,12 +42,15 @@
   });
 
   // ── Open / close emp modal ────────────────────────────────────────────
+  var empTargetHours = document.getElementById('empTargetHours');
+
   function openEmpModal(emp = null) {
     editingId = emp?.id ?? null;
     empModalTitle.textContent = emp ? 'Mitarbeiter bearbeiten' : 'Neuer Mitarbeiter';
     empName.value    = emp?.name   ?? '';
     empRole.value    = emp?.role   ?? 'account_manager';
     empEmail.value   = emp?.email  ?? '';
+    empTargetHours.value = emp?.monthly_target_hours != null ? emp.monthly_target_hours : '';
     empActive.checked = emp ? !!emp.active : true;
     document.getElementById('activeField').classList.toggle('hidden', !emp);
     roleHint.textContent = ROLE_HINTS[empRole.value] || '';
@@ -68,13 +71,15 @@
     const role        = empRole.value;
     const email       = empEmail.value.trim() || null;
     const active      = empActive.checked;
+    const targetH     = empTargetHours.value !== '' ? parseFloat(empTargetHours.value) : null;
 
     empModalSave.disabled = true;
     empModalSave.textContent = 'Speichern…';
 
     const promise = editingId
-      ? window.db.employees.update(editingId, { name, role, email, active })
-      : window.db.employees.create(name, role, email);
+      ? window.db.employees.update(editingId, { name, role, email, active, monthly_target_hours: targetH })
+      : window.db.employees.create(name, role, email)
+          .then(function(emp) { return window.db.employees.update(emp.id, { monthly_target_hours: targetH }); });
 
     promise
       .then(() => { closeEmpModal(); loadEmployees(); })
