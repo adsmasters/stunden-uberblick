@@ -166,7 +166,8 @@
       forYear: (year) =>
         q(s => s.from('entries')
           .select('*, employees(id, name, role)')
-          .eq('year', year)),
+          .eq('year', year)
+          .limit(5000)),
 
       upsert: (clientId, employeeId, year, month, hours) =>
         q(s => s.from('entries')
