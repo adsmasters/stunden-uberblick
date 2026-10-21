@@ -119,7 +119,7 @@
     Promise.all([
       window.db.employees.listActive(),
       window.db.utilHours.forYear(year),
-      window.db.entries.forYear(year),
+      window.db.entries.forYearPaged(year),
       window.db.clients.list(),
       window.db.absences.forYear(year).catch(function () { return []; }),
     ]).then(function (results) {
