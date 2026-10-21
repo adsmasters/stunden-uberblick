@@ -162,12 +162,22 @@
           .eq('client_id', clientId).eq('year', year)
           .order('month')),
 
-      // All entries for all clients for a full year (for overview)
-      forYear: (year) =>
-        q(s => s.from('entries')
-          .select('*, employees(id, name, role)')
-          .eq('year', year)
-          .limit(5000)),
+      // All entries for all clients for a full year – paginated to bypass server max-rows cap
+      forYear: async function (year) {
+        var all = [], from = 0, PAGE = 1000;
+        while (true) {
+          var { data, error } = await sb()
+            .from('entries')
+            .select('employee_id, client_id, month, hours')
+            .eq('year', year)
+            .range(from, from + PAGE - 1);
+          if (error) throw error;
+          all = all.concat(data || []);
+          if ((data || []).length < PAGE) break;
+          from += PAGE;
+        }
+        return all;
+      },
 
       upsert: (clientId, employeeId, year, month, hours) =>
         q(s => s.from('entries')
