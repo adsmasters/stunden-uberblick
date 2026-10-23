@@ -187,15 +187,31 @@
       var clientBookings = bookingsByClient[c.id] || [];
       var bookingH       = bookingHoursForMonth(clientBookings, year, month);
 
+      // Own hours: only the selected employee (AM hours for am role, ADV for adv)
       var myItems = agg.breakdown.filter(function (b) {
         if (b.employeeId !== empId) return false;
-        return role === 'am'
-          ? (b.role === 'account_manager' || b.role === 'freelancer')
-          : b.role === 'advertising';
+        return role === 'am' ? b.role === 'account_manager' : b.role === 'advertising';
       });
-      var tracked = myItems.reduce(function (s, b) {
+      var myTracked = myItems.reduce(function (s, b) {
         return s + (b.counted != null ? b.counted : b.hours);
       }, 0);
+
+      // FL hours: all freelancers on this client count toward the AM budget
+      var flItems = [];
+      if (role === 'am') {
+        agg.breakdown.forEach(function (b) {
+          if (b.role !== 'freelancer') return;
+          var ex = null;
+          for (var i = 0; i < flItems.length; i++) {
+            if (flItems[i].employeeId === b.employeeId) { ex = flItems[i]; break; }
+          }
+          var cnt = b.counted != null ? b.counted : b.hours;
+          if (ex) { ex.counted += cnt; }
+          else flItems.push({ employeeId: b.employeeId, name: b.name, counted: cnt });
+        });
+      }
+      var flCountedTotal = flItems.reduce(function (s, f) { return s + f.counted; }, 0);
+      var tracked = myTracked + flCountedTotal;
       if (role === 'am') tracked += bookingH;
 
       // Phase-aware budget + adjustment (needs tracked, so computed after)
@@ -216,6 +232,7 @@
         monthBudget: monthBudget,
         remaining:   remaining,
         bookingH:    bookingH,
+        flItems:     flItems,
       };
     });
 
@@ -302,6 +319,16 @@
       bookBadge = ' <span class="adj-badge">+' + window.fmtHours(r.bookingH) + ' Buchung</span>';
     }
 
+    // FL badges — one per freelancer
+    var flBadges = '';
+    if (!r.outOfPeriod && r.flItems && r.flItems.length > 0) {
+      r.flItems.forEach(function (fl) {
+        flBadges +=
+          ' <span class="adj-badge" style="background:var(--fl-bg,#fef3c7);color:var(--fl-fg,#92400e)">' +
+          'inkl. ' + window.fmtHours(fl.counted) + ' FL (' + fl.name + ')</span>';
+      });
+    }
+
     // Budget cell
     var budgetCell = '—';
     if (r.outOfPeriod) {
@@ -316,7 +343,7 @@
         escHtml(r.client.name) + '</a></td>' +
       '<td><span class="role-badge ' + roleCls + '">' + roleLabel + '</span></td>' +
       '<td class="num">' + budgetCell + '</td>' +
-      '<td class="num">' + (r.outOfPeriod ? '—' : window.fmtHours(r.tracked) + bookBadge) + '</td>' +
+      '<td class="num">' + (r.outOfPeriod ? '—' : window.fmtHours(r.tracked) + bookBadge + flBadges) + '</td>' +
       '<td class="num" style="' + remStyle + '">' + remText + '</td>' +
       '<td class="util-bar-cell" style="padding:8px 10px">' +
         '<div class="util-bar-wrap">' + progressHtml + '</div>' +
