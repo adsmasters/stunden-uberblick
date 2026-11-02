@@ -157,13 +157,35 @@
       var clientMap = {};
       clientsData.forEach(function (c) { clientMap[c.id] = c; });
 
+      // Clients treated as internal (hours count as intern, not client-facing)
+      var internalClientIds = {};
+      clientsData.forEach(function (c) {
+        if ((c.name || '').trim().toLowerCase() === 'adsmasters') internalClientIds[c.id] = true;
+      });
+
       var clientBreakdown = {};
+      var extraIntern = {};   // AdsMasters hours per employee per month
       entriesData.forEach(function (e) {
+        if (internalClientIds[e.client_id]) {
+          // Redirect to intern bucket
+          if (!extraIntern[e.employee_id]) extraIntern[e.employee_id] = {};
+          extraIntern[e.employee_id][e.month] =
+            (extraIntern[e.employee_id][e.month] || 0) + (e.hours || 0);
+          return;
+        }
         if (!clientBreakdown[e.employee_id]) clientBreakdown[e.employee_id] = {};
         if (!clientBreakdown[e.employee_id][e.month]) clientBreakdown[e.employee_id][e.month] = {};
         var cid = e.client_id;
         clientBreakdown[e.employee_id][e.month][cid] =
           (clientBreakdown[e.employee_id][e.month][cid] || 0) + (e.hours || 0);
+      });
+
+      // Merge AdsMasters hours into empIntern
+      Object.keys(extraIntern).forEach(function (eid) {
+        if (!empIntern[eid]) empIntern[eid] = {};
+        Object.keys(extraIntern[eid]).forEach(function (m) {
+          empIntern[eid][m] = (empIntern[eid][m] || 0) + extraIntern[eid][m];
+        });
       });
 
       // absence map: { empId: { month: { vacation, sick } } }
